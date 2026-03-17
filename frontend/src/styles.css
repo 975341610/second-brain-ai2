@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --paper: #f7f1e4;
+  --ink: #2d261c;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.markdown-body {
+  line-height: 1.75;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 0 0 0.75rem;
+  font-family: Georgia, serif;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 0.85rem;
+}
+
+.markdown-body code {
+  border-radius: 0.5rem;
+  background: rgba(39, 36, 28, 0.08);
+  padding: 0.1rem 0.35rem;
+}
+
+@media (max-width: 1279px) {
+  .xl\:grid-cols-\[280px_minmax\(0\,1fr\)_360px\] {
+    grid-template-columns: 1fr;
+  }
+}

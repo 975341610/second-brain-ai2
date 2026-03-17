@@ -1,0 +1,112 @@
+name: Windows Package
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        shell: powershell
+        run: |
+          if (Test-Path package-lock.json) {
+            npm ci
+          } else {
+            npm install
+          }
+
+      - name: Build frontend
+        working-directory: frontend
+        shell: powershell
+        run: npm run build
+
+      - name: Install backend build dependencies
+        shell: powershell
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pyinstaller
+
+      - name: Stage frontend bundle
+        shell: powershell
+        run: |
+          if (Test-Path frontend_dist) { Remove-Item frontend_dist -Recurse -Force }
+          Copy-Item frontend/dist frontend_dist -Recurse
+
+      - name: Build desktop executable
+        shell: powershell
+        run: |
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          python -m PyInstaller second_brain_ai.spec --noconfirm --clean
+
+      - name: Prepare portable app folder
+        shell: powershell
+        run: |
+          $portableDir = "$env:RUNNER_TEMP\SecondBrainAI"
+          if (Test-Path $portableDir) { Remove-Item $portableDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $portableDir | Out-Null
+          Copy-Item dist/SecondBrainAI/* $portableDir -Recurse
+          Copy-Item windows/Start* $portableDir
+          Copy-Item windows/README-Windows.txt $portableDir
+          "PORTABLE_DIR=$portableDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build Setup.exe
+        shell: powershell
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DSourceDir=$env:PORTABLE_DIR" "/DOutputDirValue=$env:RUNNER_TEMP" installer.iss
+
+      - name: Archive portable app
+        shell: powershell
+        run: Compress-Archive -Path "$env:PORTABLE_DIR\*" -DestinationPath "$env:RUNNER_TEMP\SecondBrainAI-portable.zip" -Force
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: second-brain-ai-windows
+          path: |
+            ${{ runner.temp }}/Setup.exe
+            ${{ runner.temp }}/SecondBrainAI-portable.zip
+          if-no-files-found: error
+
+      - name: Publish tag release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ runner.temp }}/Setup.exe
+            ${{ runner.temp }}/SecondBrainAI-portable.zip
+          generate_release_notes: true

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+backend/chroma_store/
+backend/second_brain.db
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+.env
