@@ -1,4 +1,4 @@
-import { CheckCircle2, FileText, Info, ListTodo, MessageSquareText, XCircle } from 'lucide-react';
+import { CheckCircle2, FileText, Info, ListTodo, MessageSquareText, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AssistantPanel } from '../components/AssistantPanel';
 import { EditorPanel } from '../components/EditorPanel';
@@ -10,8 +10,11 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<'notes' | 'editor' | 'tasks' | 'assistant'>('editor');
   const {
     notes,
+    notebooks,
+    trash,
     tasks,
     selectedNoteId,
+    selectedNoteIds,
     assistant,
     loading,
     isSavingNote,
@@ -20,12 +23,26 @@ export default function App() {
     modelConfig,
     loadInitialData,
     saveNote,
+    createNotebook,
+    updateNotebook,
+    deleteNotebook,
+    restoreNotebook,
+    purgeNotebook,
+    moveNote,
+    toggleNoteSelection,
+    clearNoteSelection,
+    bulkMoveNotes,
+    bulkDeleteNotes,
+    deleteNote,
+    restoreNote,
+    purgeNote,
     selectNote,
     createTask,
     updateTaskStatus,
     askAssistant,
     uploadFiles,
     updateModelConfig,
+    notify,
     clearToast,
   } = useAppStore();
 
@@ -35,7 +52,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => clearToast(), 2600);
+    const timer = window.setTimeout(() => clearToast(), toast.tone === 'error' ? 1500 : 1200);
     return () => window.clearTimeout(timer);
   }, [toast, clearToast]);
 
@@ -55,16 +72,16 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(248,214,135,0.45),_transparent_35%),linear-gradient(135deg,_#f4efe4,_#d9e7df_55%,_#f7f4ee)] p-4 text-stone-900 lg:p-6">
-      <div className="mx-auto mb-4 flex max-w-[1600px] items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2 text-xs font-medium">
-          {isSavingNote && <span className="rounded-full bg-stone-900 px-3 py-2 text-white">笔记保存中</span>}
+        <div className="mx-auto mb-4 flex max-w-[1600px] items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2 text-xs font-medium">
           {isUploading && <span className="rounded-full bg-amber-600 px-3 py-2 text-white">文件导入中</span>}
           {loading && <span className="rounded-full bg-emerald-700 px-3 py-2 text-white">AI 正在处理中</span>}
-        </div>
+          </div>
         {toast && (
           <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-soft ${toastClasses}`}>
             {toastIcon}
             <span>{toast.text}</span>
+            <button onClick={clearToast} className="ml-1 opacity-70"><X size={14} /></button>
           </div>
         )}
       </div>
@@ -88,13 +105,36 @@ export default function App() {
         <div className={mobileTab === 'notes' ? 'block xl:block' : 'hidden xl:block'}>
           <Sidebar
             notes={notes}
+            notebooks={notebooks}
+            trash={trash}
             tasks={tasks}
             selectedNoteId={selectedNoteId}
+            selectedNoteIds={selectedNoteIds}
             onSelectNote={(noteId) => {
               selectNote(noteId);
               setMobileTab('editor');
             }}
+            onToggleNoteSelection={toggleNoteSelection}
+            onClearSelection={clearNoteSelection}
             onCreateNote={() => void saveNote({ title: '未命名笔记', content: '# 新建笔记\n\n从这里开始记录你的想法。' })}
+            onCreateNotebook={(name) => void createNotebook(name)}
+            onNotify={notify}
+            onUpdateNote={(noteId, payload) => {
+              const note = notes.find((item) => item.id === noteId);
+              if (!note) return;
+              void saveNote({ id: note.id, title: payload.title ?? note.title, content: note.content, icon: payload.icon ?? note.icon });
+            }}
+            onUpdateNotebook={(notebookId, payload) => void updateNotebook(notebookId, payload)}
+            onDeleteNotebook={(notebookId) => void deleteNotebook(notebookId)}
+            onRestoreNotebook={(notebookId) => void restoreNotebook(notebookId)}
+            onPurgeNotebook={(notebookId) => void purgeNotebook(notebookId)}
+            onCreateNoteInNotebook={(notebookId) => void saveNote({ title: '未命名笔记', content: '# 新建笔记\n\n从这里开始记录你的想法。', notebookId })}
+            onMoveNote={(noteId, notebookId, position) => void moveNote(noteId, notebookId, position)}
+            onBulkMoveNotes={(notebookId) => void bulkMoveNotes(notebookId)}
+            onBulkDeleteNotes={() => void bulkDeleteNotes()}
+            onDeleteNote={(noteId) => void deleteNote(noteId)}
+            onRestoreNote={(noteId) => void restoreNote(noteId)}
+            onPurgeNote={(noteId) => void purgeNote(noteId)}
             onUpload={(files) => void uploadFiles(files)}
           />
         </div>

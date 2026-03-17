@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect, text
 
 from backend.api.routes import router
 from backend.config import get_settings, runtime_root
@@ -31,11 +32,32 @@ assets_dir = frontend_dist / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+def run_migrations() -> None:
+    inspector = inspect(engine)
+    with engine.begin() as connection:
+        if "notebooks" not in inspector.get_table_names():
+            connection.execute(text("CREATE TABLE notebooks (id INTEGER PRIMARY KEY, name VARCHAR(255) UNIQUE, created_at DATETIME)"))
+        notebook_columns = {column["name"] for column in inspector.get_columns("notebooks")} if "notebooks" in inspector.get_table_names() else set()
+        if "icon" not in notebook_columns:
+            connection.execute(text("ALTER TABLE notebooks ADD COLUMN icon VARCHAR(500) DEFAULT '📒'"))
+        if "deleted_at" not in notebook_columns:
+            connection.execute(text("ALTER TABLE notebooks ADD COLUMN deleted_at DATETIME"))
+        note_columns = {column["name"] for column in inspector.get_columns("notes")} if "notes" in inspector.get_table_names() else set()
+        if "notebook_id" not in note_columns:
+            connection.execute(text("ALTER TABLE notes ADD COLUMN notebook_id INTEGER"))
+        if "position" not in note_columns:
+            connection.execute(text("ALTER TABLE notes ADD COLUMN position INTEGER DEFAULT 0"))
+        if "icon" not in note_columns:
+            connection.execute(text("ALTER TABLE notes ADD COLUMN icon VARCHAR(500) DEFAULT '📝'"))
+        if "deleted_at" not in note_columns:
+            connection.execute(text("ALTER TABLE notes ADD COLUMN deleted_at DATETIME"))
+
 
 @app.on_event("startup")
 async def startup_event() -> None:
     Path(settings.chroma_path).mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    run_migrations()
     seed_files()
     with SessionLocal() as db:
         seed_database(db)

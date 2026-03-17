@@ -5,20 +5,26 @@ from sqlalchemy.orm import Session
 
 from backend.agent.planner import run_agent
 from backend.config import get_settings
-from backend.models.db_models import Note
+from backend.models.db_models import Note, Notebook
 from backend.models.schemas import (
     AgentRequest,
     AskRequest,
     AskResponse,
+    BulkNoteAction,
     Citation,
     ModelConfigPayload,
+    NotebookCreate,
+    NotebookUpdate,
+    NotebookResponse,
     NoteCreate,
+    NoteMovePayload,
     NoteResponse,
     NoteUpdate,
     SearchRequest,
     TaskCreate,
     TaskResponse,
     TaskUpdate,
+    TrashResponse,
     UploadResponse,
 )
 from backend.database import get_db
@@ -27,12 +33,27 @@ from backend.services.ai_client import AIClient
 from backend.services.document_service import chunk_text, parse_document
 from backend.services.repositories import (
     create_note,
+    create_notebook,
     create_task,
     get_note,
+    get_or_create_default_notebook,
     get_or_create_model_config,
     list_notes,
+    list_notebooks,
+    list_trashed_notes,
+    list_trashed_notebooks,
     list_tasks,
+    bulk_move_notes,
+    bulk_soft_delete_notes,
+    move_note,
+    purge_note,
+    purge_notebook,
     replace_note_links,
+    restore_note,
+    restore_notebook,
+    soft_delete_note,
+    soft_delete_notebook,
+    update_notebook,
     update_note,
     update_model_config,
     update_task,
@@ -50,19 +71,27 @@ def note_to_response(note: Note) -> NoteResponse:
     return NoteResponse(
         id=note.id,
         title=note.title,
+        icon=note.icon,
         content=note.content,
         summary=note.summary,
         tags=[tag for tag in note.tags.split(",") if tag],
         links=links,
+        notebook_id=note.notebook_id,
+        position=note.position,
         created_at=note.created_at,
+        deleted_at=note.deleted_at,
     )
 
 
-async def persist_note(db: Session, title: str, content: str) -> NoteResponse:
-    return await index_note(db, None, title, content)
+def notebook_to_response(notebook: Notebook) -> NotebookResponse:
+    return NotebookResponse.model_validate(notebook)
 
 
-async def index_note(db: Session, note_id: int | None, title: str, content: str) -> NoteResponse:
+async def persist_note(db: Session, title: str, content: str, notebook_id: int | None = None, icon: str = "📝") -> NoteResponse:
+    return await index_note(db, None, title, content, notebook_id, icon)
+
+
+async def index_note(db: Session, note_id: int | None, title: str, content: str, notebook_id: int | None = None, icon: str = "📝") -> NoteResponse:
     model_config = get_or_create_model_config(db)
     llm_config = {
         "provider": model_config.provider,
@@ -72,7 +101,11 @@ async def index_note(db: Session, note_id: int | None, title: str, content: str)
     }
     summary = await ai_client.summarize(content, llm_config)
     tags = await ai_client.tags(content, llm_config)
-    note = create_note(db, title=title, content=content, summary=summary, tags=tags) if note_id is None else update_note(db, note_id, title, content, summary, tags)
+    if note_id is None:
+        notebook_id = notebook_id or get_or_create_default_notebook(db).id
+        note = create_note(db, title=title, content=content, summary=summary, tags=tags, notebook_id=notebook_id, icon=icon)
+    else:
+        note = update_note(db, note_id, title, content, summary, tags, icon)
 
     chunks = chunk_text(content, settings.chunk_size_words, settings.chunk_overlap_words)
     records = []
@@ -106,10 +139,11 @@ async def index_note(db: Session, note_id: int | None, title: str, content: str)
 @router.post("/upload", response_model=UploadResponse)
 async def upload_documents(files: list[UploadFile] = File(...), db: Session = Depends(get_db)) -> UploadResponse:
     imported: list[NoteResponse] = []
+    default_notebook = get_or_create_default_notebook(db)
     for file in files:
         content = await file.read()
         title, parsed = parse_document(file.filename, content)
-        imported.append(await persist_note(db, title, parsed))
+        imported.append(await persist_note(db, title, parsed, default_notebook.id))
     return UploadResponse(imported_notes=imported)
 
 
@@ -146,9 +180,59 @@ def get_notes(db: Session = Depends(get_db)) -> list[NoteResponse]:
     return [note_to_response(note) for note in list_notes(db)]
 
 
+@router.get("/trash", response_model=TrashResponse)
+def get_trash(db: Session = Depends(get_db)) -> TrashResponse:
+    return TrashResponse(
+        notes=[note_to_response(note) for note in list_trashed_notes(db)],
+        notebooks=[notebook_to_response(notebook) for notebook in list_trashed_notebooks(db)],
+    )
+
+
+@router.get("/notebooks", response_model=list[NotebookResponse])
+def get_notebooks(db: Session = Depends(get_db)) -> list[NotebookResponse]:
+    get_or_create_default_notebook(db)
+    return [notebook_to_response(notebook) for notebook in list_notebooks(db)]
+
+
+@router.post("/notebooks", response_model=NotebookResponse)
+def create_notebook_api(payload: NotebookCreate, db: Session = Depends(get_db)) -> NotebookResponse:
+    return notebook_to_response(create_notebook(db, payload.name, payload.icon))
+
+
+@router.patch("/notebooks/{notebook_id}", response_model=NotebookResponse)
+def update_notebook_api(notebook_id: int, payload: NotebookUpdate, db: Session = Depends(get_db)) -> NotebookResponse:
+    notebook = update_notebook(db, notebook_id, payload.name, payload.icon)
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return notebook_to_response(notebook)
+
+
+@router.delete("/notebooks/{notebook_id}")
+def delete_notebook_api(notebook_id: int, db: Session = Depends(get_db)) -> dict:
+    notebook = soft_delete_notebook(db, notebook_id)
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found or cannot delete default notebook")
+    return {"status": "ok"}
+
+
+@router.post("/notebooks/{notebook_id}/restore", response_model=NotebookResponse)
+def restore_notebook_api(notebook_id: int, db: Session = Depends(get_db)) -> NotebookResponse:
+    notebook = restore_notebook(db, notebook_id)
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return notebook_to_response(notebook)
+
+
+@router.delete("/notebooks/{notebook_id}/purge")
+def purge_notebook_api(notebook_id: int, db: Session = Depends(get_db)) -> dict:
+    if not purge_notebook(db, notebook_id):
+        raise HTTPException(status_code=404, detail="Notebook not found or cannot purge default notebook")
+    return {"status": "ok"}
+
+
 @router.post("/notes", response_model=NoteResponse)
 async def create_note_api(payload: NoteCreate, db: Session = Depends(get_db)) -> NoteResponse:
-    return await persist_note(db, payload.title, payload.content)
+    return await persist_note(db, payload.title, payload.content, payload.notebook_id, payload.icon)
 
 
 @router.put("/notes/{note_id}", response_model=NoteResponse)
@@ -158,7 +242,53 @@ async def update_note_api(note_id: int, payload: NoteUpdate, db: Session = Depen
         raise HTTPException(status_code=404, detail="Note not found")
     title = payload.title or existing.title
     content = payload.content or existing.content
-    return await index_note(db, note_id, title, content)
+    icon = payload.icon or existing.icon
+    return await index_note(db, note_id, title, content, existing.notebook_id, icon)
+
+
+@router.patch("/notes/{note_id}/move", response_model=NoteResponse)
+def move_note_api(note_id: int, payload: NoteMovePayload, db: Session = Depends(get_db)) -> NoteResponse:
+    target_notebook_id = payload.notebook_id or get_or_create_default_notebook(db).id
+    note = move_note(db, note_id, target_notebook_id, payload.position)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note_to_response(note)
+
+
+@router.post("/notes/bulk-move")
+def bulk_move_notes_api(payload: BulkNoteAction, db: Session = Depends(get_db)) -> dict:
+    notebook_id = payload.notebook_id or get_or_create_default_notebook(db).id
+    notes = bulk_move_notes(db, payload.note_ids, notebook_id, payload.position)
+    return {"notes": [note_to_response(note).model_dump() for note in notes]}
+
+
+@router.post("/notes/bulk-delete")
+def bulk_delete_notes_api(payload: BulkNoteAction, db: Session = Depends(get_db)) -> dict:
+    notes = bulk_soft_delete_notes(db, payload.note_ids)
+    return {"notes": [note_to_response(note).model_dump() for note in notes]}
+
+
+@router.delete("/notes/{note_id}")
+def delete_note_api(note_id: int, db: Session = Depends(get_db)) -> dict:
+    note = soft_delete_note(db, note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"status": "ok"}
+
+
+@router.post("/notes/{note_id}/restore", response_model=NoteResponse)
+def restore_note_api(note_id: int, db: Session = Depends(get_db)) -> NoteResponse:
+    note = restore_note(db, note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note_to_response(note)
+
+
+@router.delete("/notes/{note_id}/purge")
+def purge_note_api(note_id: int, db: Session = Depends(get_db)) -> dict:
+    if not purge_note(db, note_id):
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"status": "ok"}
 
 
 @router.get("/tasks", response_model=list[TaskResponse])

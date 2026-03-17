@@ -1,4 +1,4 @@
-import type { AskResponse, ModelConfig, Note, Task } from './types';
+import type { AskResponse, ModelConfig, Note, Notebook, Task, TrashState } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000/api' : `${window.location.origin}/api`);
 
@@ -19,10 +19,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   listNotes: () => request<Note[]>('/notes'),
-  createNote: (payload: { title: string; content: string }) =>
+  listNotebooks: () => request<Notebook[]>('/notebooks'),
+  createNotebook: (payload: { name: string; icon?: string }) => request<Notebook>('/notebooks', { method: 'POST', body: JSON.stringify(payload) }),
+  updateNotebook: (notebookId: number, payload: { name?: string; icon?: string }) =>
+    request<Notebook>(`/notebooks/${notebookId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteNotebook: (notebookId: number) => request(`/notebooks/${notebookId}`, { method: 'DELETE' }),
+  restoreNotebook: (notebookId: number) => request<Notebook>(`/notebooks/${notebookId}/restore`, { method: 'POST' }),
+  purgeNotebook: (notebookId: number) => request(`/notebooks/${notebookId}/purge`, { method: 'DELETE' }),
+  createNote: (payload: { title: string; content: string; notebook_id?: number | null; icon?: string }) =>
     request<Note>('/notes', { method: 'POST', body: JSON.stringify(payload) }),
-  updateNote: (noteId: number, payload: { title?: string; content?: string }) =>
+  updateNote: (noteId: number, payload: { title?: string; content?: string; icon?: string }) =>
     request<Note>(`/notes/${noteId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  moveNote: (noteId: number, payload: { notebook_id?: number | null; position: number }) =>
+    request<Note>(`/notes/${noteId}/move`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  bulkMoveNotes: (payload: { note_ids: number[]; notebook_id?: number | null; position: number }) =>
+    request<{ notes: Note[] }>('/notes/bulk-move', { method: 'POST', body: JSON.stringify(payload) }),
+  bulkDeleteNotes: (payload: { note_ids: number[]; position?: number }) =>
+    request<{ notes: Note[] }>('/notes/bulk-delete', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteNote: (noteId: number) => request(`/notes/${noteId}`, { method: 'DELETE' }),
+  restoreNote: (noteId: number) => request<Note>(`/notes/${noteId}/restore`, { method: 'POST' }),
+  purgeNote: (noteId: number) => request(`/notes/${noteId}/purge`, { method: 'DELETE' }),
+  getTrash: () => request<TrashState>('/trash'),
   listTasks: () => request<Task[]>('/tasks'),
   createTask: (payload: { title: string; status?: string }) =>
     request<Task>('/tasks', { method: 'POST', body: JSON.stringify(payload) }),

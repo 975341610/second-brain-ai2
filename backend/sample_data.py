@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import get_settings
 from backend.models.db_models import Note, Task
-from backend.services.repositories import create_task
+from backend.services.repositories import create_task, get_or_create_default_notebook
 
 
 def seed_files() -> None:
@@ -39,6 +39,7 @@ Important principles:
 
 
 def seed_database(db: Session) -> None:
+    get_or_create_default_notebook(db)
     if not db.query(Note).first():
         pass
     if not db.query(Task).first():

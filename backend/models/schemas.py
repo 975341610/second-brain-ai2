@@ -7,15 +7,28 @@ from pydantic import BaseModel, Field
 class NoteBase(BaseModel):
     title: str = "Untitled"
     content: str
+    icon: str = "📝"
 
 
 class NoteCreate(NoteBase):
-    pass
+    notebook_id: int | None = None
 
 
 class NoteUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
+    icon: str | None = None
+
+
+class NoteMovePayload(BaseModel):
+    notebook_id: int | None = None
+    position: int = 0
+
+
+class BulkNoteAction(BaseModel):
+    note_ids: list[int]
+    notebook_id: int | None = None
+    position: int = 0
 
 
 class NoteResponse(NoteBase):
@@ -23,7 +36,10 @@ class NoteResponse(NoteBase):
     summary: str
     tags: list[str]
     links: list[int]
+    notebook_id: int | None = None
+    position: int = 0
     created_at: datetime
+    deleted_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -94,3 +110,29 @@ class ModelConfigPayload(BaseModel):
 
 class UploadResponse(BaseModel):
     imported_notes: list[NoteResponse]
+
+
+class NotebookCreate(BaseModel):
+    name: str
+    icon: str = "📒"
+
+
+class NotebookUpdate(BaseModel):
+    name: str | None = None
+    icon: str | None = None
+
+
+class NotebookResponse(BaseModel):
+    id: int
+    name: str
+    icon: str
+    created_at: datetime
+    deleted_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class TrashResponse(BaseModel):
+    notes: list[NoteResponse]
+    notebooks: list[NotebookResponse]

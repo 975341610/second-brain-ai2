@@ -1,11 +1,28 @@
 export type Note = {
   id: number;
   title: string;
+  icon: string;
   content: string;
   summary: string;
   tags: string[];
   links: number[];
+  notebook_id: number | null;
+  position: number;
   created_at: string;
+  deleted_at?: string | null;
+};
+
+export type Notebook = {
+  id: number;
+  name: string;
+  icon: string;
+  created_at: string;
+  deleted_at?: string | null;
+};
+
+export type TrashState = {
+  notes: Note[];
+  notebooks: Notebook[];
 };
 
 export type Task = {

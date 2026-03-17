@@ -7,24 +7,22 @@ type EditorPanelProps = {
   note: Note | null;
   relatedNotes: Note[];
   isSaving: boolean;
-  onSave: (payload: { id?: number; title: string; content: string }) => Promise<void>;
+  onSave: (payload: { id?: number; title: string; content: string; icon?: string; silent?: boolean }) => Promise<void>;
 };
 
 export function EditorPanel({ note, relatedNotes, isSaving, onSave }: EditorPanelProps) {
-  const [title, setTitle] = useState('未命名笔记');
   const [content, setContent] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const autosaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setTitle(note?.title ?? '未命名笔记');
     setContent(note?.content ?? '# 开始记录\n\n写下你的灵感、项目规划、读书摘录或研究结论。');
     setLastSavedAt(note ? new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : null);
   }, [note]);
 
   const summary = useMemo(() => note?.summary || '保存笔记后，这里会显示 AI 自动摘要。', [note]);
-  const isDirty = title !== (note?.title ?? '未命名笔记') || content !== (note?.content ?? '# 开始记录\n\n写下你的灵感、项目规划、读书摘录或研究结论。');
+  const isDirty = content !== (note?.content ?? '# 开始记录\n\n写下你的灵感、项目规划、读书摘录或研究结论。');
 
   useEffect(() => {
     if (!isDirty || isSaving) {
@@ -32,24 +30,22 @@ export function EditorPanel({ note, relatedNotes, isSaving, onSave }: EditorPane
       return;
     }
     autosaveTimerRef.current = window.setTimeout(async () => {
-      await onSave({ id: note?.id, title, content });
+      await onSave({ id: note?.id, title: note?.title ?? '未命名笔记', content, icon: note?.icon ?? '📝', silent: true });
       setLastSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
-    }, 1200);
+    }, 2600);
     return () => {
       if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     };
-  }, [content, title, note?.id, isDirty, isSaving, onSave]);
+  }, [content, note?.id, note?.title, note?.icon, isDirty, isSaving, onSave]);
 
   return (
     <section className="flex h-[min(72vh,980px)] min-h-[680px] flex-col gap-4 overflow-hidden rounded-[28px] border border-white/50 bg-[rgba(255,252,247,0.85)] p-6 shadow-soft backdrop-blur">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className="w-full bg-transparent font-display text-4xl text-stone-900 outline-none"
-            placeholder="未命名笔记"
-          />
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-2xl">{note?.icon ?? '📝'}</div>
+            <h2 className="font-display text-4xl text-stone-900">{note?.title ?? '未命名笔记'}</h2>
+          </div>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-500">{summary}</p>
           <div className="mt-3 flex items-center gap-2 text-xs text-stone-500">
             <Clock3 size={14} />
@@ -79,7 +75,7 @@ export function EditorPanel({ note, relatedNotes, isSaving, onSave }: EditorPane
             </button>
           </div>
           <button
-            onClick={() => onSave({ id: note?.id, title, content })}
+            onClick={() => onSave({ id: note?.id, title: note?.title ?? '未命名笔记', content, icon: note?.icon ?? '📝' })}
             disabled={isSaving}
             className="flex items-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-sm font-medium text-stone-50"
           >

@@ -43,7 +43,7 @@ export function AssistantPanel({ assistant, modelConfig, loading, onAsk, onUpdat
   }, [modelConfig]);
 
   return (
-    <aside className="flex h-full flex-col gap-4 rounded-[28px] border border-white/50 bg-[rgba(246,244,238,0.9)] p-5 shadow-soft backdrop-blur">
+    <aside className="flex h-[min(88vh,1120px)] min-h-[760px] flex-col gap-4 overflow-hidden rounded-[28px] border border-white/50 bg-[rgba(246,244,238,0.9)] p-5 shadow-soft backdrop-blur">
       <div className="flex items-center gap-3">
         <div className="rounded-2xl bg-stone-900 p-3 text-stone-50">
           <Bot size={18} />
@@ -87,7 +87,7 @@ export function AssistantPanel({ assistant, modelConfig, loading, onAsk, onUpdat
         {assistant ? <ReactMarkdown>{assistant.answer}</ReactMarkdown> : <p>可选择普通对话、知识库问答或智能体模式。</p>}
       </div>
 
-      <div className="rounded-[24px] border border-stone-200 bg-white p-4">
+      <div className="max-h-[220px] overflow-y-auto rounded-[24px] border border-stone-200 bg-white p-4">
         <div className="mb-3 text-sm font-medium text-stone-500">引用来源</div>
         <CitationList citations={assistant?.citations || []} />
       </div>
