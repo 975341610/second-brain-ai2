@@ -21,7 +21,7 @@ async def run_agent(db: Session, goal: str, ai_client: AIClient) -> AgentRespons
     created = [create_task_tool(db, task) for task in todo_titles]
     existing = list_tasks_tool(db)
     answer = (
-        f"I searched your knowledge base, created {len(created)} tasks, and aligned the plan with your stored notes. "
-        f"You now have {len(existing)} tasks in the system."
+        f"我已经检索你的知识库，并基于现有笔记生成了 {len(created)} 条任务。"
+        f" 当前系统里一共有 {len(existing)} 条任务可继续推进。"
     )
     return AgentResponse(answer=answer, tasks_created=created, evidence=evidence)

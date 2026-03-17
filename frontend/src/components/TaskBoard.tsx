@@ -9,6 +9,11 @@ type TaskBoardProps = {
 };
 
 const columns: Task['status'][] = ['todo', 'doing', 'done'];
+const statusLabels: Record<Task['status'], string> = {
+  todo: '待开始',
+  doing: '进行中',
+  done: '已完成',
+};
 
 export function TaskBoard({ tasks, onCreateTask, onUpdateTaskStatus }: TaskBoardProps) {
   const [title, setTitle] = useState('');
@@ -17,11 +22,11 @@ export function TaskBoard({ tasks, onCreateTask, onUpdateTaskStatus }: TaskBoard
     <section className="rounded-[28px] border border-white/50 bg-[rgba(255,251,245,0.82)] p-5 shadow-soft backdrop-blur">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm font-medium text-stone-900">Task board</div>
-          <div className="text-xs text-stone-500">Agent-created TODOs stay editable.</div>
+          <div className="text-sm font-medium text-stone-900">任务看板</div>
+          <div className="text-xs text-stone-500">AI 生成的待办也可以继续手动编辑。</div>
         </div>
         <div className="flex gap-2">
-          <input value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" placeholder="Add task" />
+          <input value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" placeholder="添加任务" />
           <button
             onClick={async () => {
               if (!title.trim()) return;
@@ -30,7 +35,7 @@ export function TaskBoard({ tasks, onCreateTask, onUpdateTaskStatus }: TaskBoard
             }}
             className="rounded-2xl bg-stone-900 px-4 py-2 text-sm font-medium text-white"
           >
-            Add
+            添加
           </button>
         </div>
       </div>
@@ -38,7 +43,7 @@ export function TaskBoard({ tasks, onCreateTask, onUpdateTaskStatus }: TaskBoard
       <div className="grid gap-3 md:grid-cols-3">
         {columns.map((column) => (
           <div key={column} className="rounded-[24px] bg-white/90 p-4">
-            <div className="mb-3 text-xs uppercase tracking-[0.25em] text-stone-400">{column}</div>
+            <div className="mb-3 text-xs uppercase tracking-[0.25em] text-stone-400">{statusLabels[column]}</div>
             <div className="space-y-2">
               {tasks.filter((task) => task.status === column).map((task) => (
                 <div key={task.id} className="rounded-2xl border border-stone-100 bg-stone-50 px-4 py-3">
@@ -53,7 +58,7 @@ export function TaskBoard({ tasks, onCreateTask, onUpdateTaskStatus }: TaskBoard
                         onClick={() => onUpdateTaskStatus(task.id, status)}
                         className={`rounded-full px-2 py-1 ${task.status === status ? 'bg-stone-900 text-white' : 'bg-white text-stone-500'}`}
                       >
-                        {status}
+                        {statusLabels[status]}
                       </button>
                     ))}
                   </div>

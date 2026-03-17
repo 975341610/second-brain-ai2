@@ -41,7 +41,7 @@ export default function App() {
           tasks={tasks}
           selectedNoteId={selectedNoteId}
           onSelectNote={selectNote}
-          onCreateNote={() => void saveNote({ title: 'Untitled', content: '# New note\n\nWrite here...' })}
+          onCreateNote={() => void saveNote({ title: '未命名笔记', content: '# 新建笔记\n\n从这里开始记录你的想法。' })}
           onUpload={(files) => void uploadFiles(files)}
         />
 

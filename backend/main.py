@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes import router
@@ -46,9 +46,9 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/{full_path:path}")
-async def spa(full_path: str) -> FileResponse | dict[str, str]:
+@app.get("/{full_path:path}", response_model=None)
+async def spa(full_path: str):
     index_file = frontend_dist / "index.html"
     if index_file.exists() and not full_path.startswith("api") and full_path != "health":
         return FileResponse(index_file)
-    return FileResponse(index_file) if index_file.exists() else {"status": "backend-only"}
+    return FileResponse(index_file) if index_file.exists() else JSONResponse({"status": "backend-only"})

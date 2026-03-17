@@ -53,24 +53,24 @@ def generate_tags(text: str, limit: int = 5) -> list[str]:
 
 def answer_from_context(question: str, contexts: list[dict]) -> str:
     if not contexts:
-        return "I could not find a matching note yet. Try importing more documents or ask a broader question."
+        return "我暂时没有找到足够匹配的本地笔记。你可以先导入更多资料，或换一个更宽泛的问题。"
     bullets = []
     for context in contexts[:3]:
         bullets.append(f"- {context['title']}: {context['excerpt']}")
     return (
-        f"Based on your local knowledge base, here is the best answer to '{question}':\n"
+        f"基于你的本地知识库，我整理出与“{question}”最相关的信息：\n"
         + "\n".join(bullets)
-        + "\nUse the cited notes to refine or extend the answer."
+        + "\n你可以结合这些引用来源继续追问或扩展答案。"
     )
 
 
 def plan_tasks(goal: str, context_snippets: list[str]) -> list[str]:
     base = [
-        f"Clarify the desired outcome for: {goal}",
-        "Review related notes and extract constraints",
-        "Break the work into one-hour execution blocks",
-        "Execute the highest-impact task and record progress",
+        f"明确目标的最终产出：{goal}",
+        "回顾相关笔记并提取约束条件",
+        "把任务拆成可在一小时内完成的执行块",
+        "优先执行影响最大的任务并记录进展",
     ]
     if context_snippets:
-        base.insert(1, f"Use knowledge from: {context_snippets[0][:72]}")
+        base.insert(1, f"结合这条已有知识继续规划：{context_snippets[0][:40]}")
     return base[:4]

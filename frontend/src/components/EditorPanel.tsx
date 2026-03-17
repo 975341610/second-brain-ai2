@@ -10,15 +10,15 @@ type EditorPanelProps = {
 };
 
 export function EditorPanel({ note, relatedNotes, onSave }: EditorPanelProps) {
-  const [title, setTitle] = useState('Untitled');
+  const [title, setTitle] = useState('未命名笔记');
   const [content, setContent] = useState('');
 
   useEffect(() => {
-    setTitle(note?.title ?? 'Untitled');
-    setContent(note?.content ?? '# Start writing\n\nCapture a note, research insight, or project brief.');
+    setTitle(note?.title ?? '未命名笔记');
+    setContent(note?.content ?? '# 开始记录\n\n写下你的灵感、项目规划、读书摘录或研究结论。');
   }, [note]);
 
-  const summary = useMemo(() => note?.summary || 'AI summaries appear here after saving the note.', [note]);
+  const summary = useMemo(() => note?.summary || '保存笔记后，这里会显示 AI 自动摘要。', [note]);
 
   return (
     <section className="flex h-full flex-col gap-4 rounded-[28px] border border-white/50 bg-[rgba(255,252,247,0.85)] p-6 shadow-soft backdrop-blur">
@@ -28,7 +28,7 @@ export function EditorPanel({ note, relatedNotes, onSave }: EditorPanelProps) {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="w-full bg-transparent font-display text-4xl text-stone-900 outline-none"
-            placeholder="Untitled"
+            placeholder="未命名笔记"
           />
           <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-500">{summary}</p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -43,7 +43,7 @@ export function EditorPanel({ note, relatedNotes, onSave }: EditorPanelProps) {
           onClick={() => onSave({ id: note?.id, title, content })}
           className="flex items-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-sm font-medium text-stone-50"
         >
-          <Save size={16} /> Save
+          <Save size={16} /> 保存
         </button>
       </div>
 
@@ -59,9 +59,9 @@ export function EditorPanel({ note, relatedNotes, onSave }: EditorPanelProps) {
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
           <div className="rounded-[24px] border border-stone-200 bg-white/90 p-5">
-            <div className="mb-3 text-sm font-medium text-stone-500">Card links</div>
+            <div className="mb-3 text-sm font-medium text-stone-500">关联卡片</div>
             <div className="space-y-2">
-              {relatedNotes.length === 0 && <div className="text-sm text-stone-400">No similar cards yet.</div>}
+              {relatedNotes.length === 0 && <div className="text-sm text-stone-400">暂时还没有相似卡片。</div>}
               {relatedNotes.map((item) => (
                 <div key={item.id} className="rounded-2xl bg-stone-50 px-4 py-3">
                   <div className="text-sm font-medium text-stone-800">{item.title}</div>
