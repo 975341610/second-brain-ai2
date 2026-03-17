@@ -1,5 +1,5 @@
-import { FileText, Plus, Tag, UploadCloud } from 'lucide-react';
-import type { ChangeEvent } from 'react';
+import { FileText, Plus, Search, Tag, UploadCloud, X } from 'lucide-react';
+import { useMemo, useState, type ChangeEvent } from 'react';
 import type { Note, Task } from '../lib/types';
 
 type SidebarProps = {
@@ -12,7 +12,18 @@ type SidebarProps = {
 };
 
 export function Sidebar({ notes, tasks, selectedNoteId, onSelectNote, onCreateNote, onUpload }: SidebarProps) {
-  const tagSet = Array.from(new Set(notes.flatMap((note) => note.tags))).slice(0, 8);
+  const [query, setQuery] = useState('');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const tagSet = Array.from(new Set(notes.flatMap((note) => note.tags))).slice(0, 12);
+  const filteredNotes = useMemo(
+    () =>
+      notes.filter((note) => {
+        const matchesQuery = !query || `${note.title} ${note.summary} ${note.content}`.toLowerCase().includes(query.toLowerCase());
+        const matchesTag = !activeTag || note.tags.includes(activeTag);
+        return matchesQuery && matchesTag;
+      }),
+    [notes, query, activeTag],
+  );
 
   const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -37,12 +48,30 @@ export function Sidebar({ notes, tasks, selectedNoteId, onSelectNote, onCreateNo
         </label>
       </div>
 
+      <div className="rounded-2xl border border-stone-200 bg-white/75 px-3 py-3">
+        <div className="flex items-center gap-2 text-stone-500">
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="w-full bg-transparent text-sm outline-none"
+            placeholder="搜索标题、摘要或内容"
+          />
+          {query && (
+            <button className="text-stone-400" onClick={() => setQuery('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
       <section className="min-h-0 flex-1 overflow-hidden">
         <div className="mb-3 flex items-center gap-2 text-sm font-medium text-stone-500">
           <FileText size={16} /> 笔记
         </div>
         <div className="flex max-h-[280px] flex-col gap-2 overflow-y-auto pr-1">
-          {notes.map((note) => (
+          {filteredNotes.length === 0 && <div className="rounded-2xl bg-white/70 px-4 py-4 text-sm text-stone-500">没有匹配的笔记，试试换个关键词或标签。</div>}
+          {filteredNotes.map((note) => (
             <button
               key={note.id}
               onClick={() => onSelectNote(note.id)}
@@ -64,10 +93,19 @@ export function Sidebar({ notes, tasks, selectedNoteId, onSelectNote, onCreateNo
           <Tag size={16} /> 标签
         </div>
         <div className="flex flex-wrap gap-2">
+          {activeTag && (
+            <button onClick={() => setActiveTag(null)} className="rounded-full bg-stone-900 px-3 py-1 text-xs font-medium text-white">
+              清除筛选
+            </button>
+          )}
           {tagSet.map((tag) => (
-            <span key={tag} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+            <button
+              key={tag}
+              onClick={() => setActiveTag(tag === activeTag ? null : tag)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${tag === activeTag ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}
+            >
               {tag}
-            </span>
+            </button>
           ))}
         </div>
       </section>

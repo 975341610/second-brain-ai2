@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+data/
 backend/chroma_store/
 backend/second_brain.db
 frontend/node_modules/

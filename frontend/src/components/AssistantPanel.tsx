@@ -1,4 +1,4 @@
-import { Bot, BrainCircuit, MessageSquareText, Sparkles } from 'lucide-react';
+import { Bot, BrainCircuit, ChevronDown, ChevronUp, MessageSquareText, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { AskResponse, Citation, ModelConfig } from '../lib/types';
@@ -36,6 +36,7 @@ export function AssistantPanel({ assistant, modelConfig, loading, onAsk, onUpdat
   const [question, setQuestion] = useState('结合我的笔记，建议我这周最值得优先推进的事情。');
   const [mode, setMode] = useState<'chat' | 'rag' | 'agent'>('rag');
   const [config, setConfig] = useState(modelConfig);
+  const [showConfig, setShowConfig] = useState(false);
 
   useEffect(() => {
     setConfig(modelConfig);
@@ -92,14 +93,21 @@ export function AssistantPanel({ assistant, modelConfig, loading, onAsk, onUpdat
       </div>
 
       <div className="rounded-[24px] border border-stone-200 bg-white p-4">
-        <div className="mb-3 text-sm font-medium text-stone-500">模型配置</div>
-        <div className="space-y-3">
-          <input value={config.provider} onChange={(e) => setConfig({ ...config, provider: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="服务商" />
-          <input value={config.model_name} onChange={(e) => setConfig({ ...config, model_name: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="模型名称" />
-          <input value={config.base_url} onChange={(e) => setConfig({ ...config, base_url: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="接口地址" />
-          <input value={config.api_key} onChange={(e) => setConfig({ ...config, api_key: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="API Key" />
-          <button onClick={() => onUpdateModelConfig(config)} className="w-full rounded-2xl bg-stone-900 px-3 py-3 text-sm font-medium text-white">保存模型设置</button>
-        </div>
+        <button onClick={() => setShowConfig((value) => !value)} className="flex w-full items-center justify-between text-left">
+          <div className="flex items-center gap-2 text-sm font-medium text-stone-700">
+            <SlidersHorizontal size={16} /> 高级设置
+          </div>
+          {showConfig ? <ChevronUp size={16} className="text-stone-400" /> : <ChevronDown size={16} className="text-stone-400" />}
+        </button>
+        {showConfig && (
+          <div className="mt-4 space-y-3">
+            <input value={config.provider} onChange={(e) => setConfig({ ...config, provider: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="服务商" />
+            <input value={config.model_name} onChange={(e) => setConfig({ ...config, model_name: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="模型名称" />
+            <input value={config.base_url} onChange={(e) => setConfig({ ...config, base_url: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="接口地址" />
+            <input value={config.api_key} onChange={(e) => setConfig({ ...config, api_key: e.target.value })} className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="API Key" />
+            <button onClick={() => onUpdateModelConfig(config)} className="w-full rounded-2xl bg-stone-900 px-3 py-3 text-sm font-medium text-white">保存模型设置</button>
+          </div>
+        )}
       </div>
     </aside>
   );

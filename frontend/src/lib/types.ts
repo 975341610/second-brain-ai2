@@ -35,3 +35,9 @@ export type ModelConfig = {
   base_url: string;
   model_name: string;
 };
+
+export type ToastMessage = {
+  id: number;
+  tone: 'success' | 'error' | 'info';
+  text: string;
+};
