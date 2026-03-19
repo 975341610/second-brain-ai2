@@ -51,6 +51,13 @@ def run_migrations() -> None:
             connection.execute(text("ALTER TABLE notes ADD COLUMN icon VARCHAR(500) DEFAULT '📝'"))
         if "deleted_at" not in note_columns:
             connection.execute(text("ALTER TABLE notes ADD COLUMN deleted_at DATETIME"))
+        task_columns = {column["name"] for column in inspector.get_columns("tasks")} if "tasks" in inspector.get_table_names() else set()
+        if "priority" not in task_columns:
+            connection.execute(text("ALTER TABLE tasks ADD COLUMN priority VARCHAR(20) DEFAULT 'medium'"))
+        if "task_type" not in task_columns:
+            connection.execute(text("ALTER TABLE tasks ADD COLUMN task_type VARCHAR(50) DEFAULT 'work'"))
+        if "deadline" not in task_columns:
+            connection.execute(text("ALTER TABLE tasks ADD COLUMN deadline DATETIME"))
 
 
 @app.on_event("startup")

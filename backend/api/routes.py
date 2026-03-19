@@ -298,12 +298,12 @@ def get_tasks(db: Session = Depends(get_db)) -> list[TaskResponse]:
 
 @router.post("/tasks", response_model=TaskResponse)
 def create_task_api(payload: TaskCreate, db: Session = Depends(get_db)) -> TaskResponse:
-    return TaskResponse.model_validate(create_task(db, payload.title, payload.status))
+    return TaskResponse.model_validate(create_task(db, payload.title, payload.status, payload.priority, payload.task_type, payload.deadline))
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse)
 def update_task_api(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)) -> TaskResponse:
-    task = update_task(db, task_id, title=payload.title, status=payload.status)
+    task = update_task(db, task_id, title=payload.title, status=payload.status, priority=payload.priority, task_type=payload.task_type, deadline=payload.deadline)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse.model_validate(task)

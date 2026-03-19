@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from backend.models.db_models import ModelConfig, Note, Notebook, NoteLink, Task
@@ -231,11 +231,33 @@ def replace_note_links(db: Session, source_note_id: int, targets: list[tuple[int
 
 
 def list_tasks(db: Session) -> list[Task]:
-    return list(db.scalars(select(Task).order_by(Task.created_at.desc())))
+    priority_rank = case(
+        (Task.priority == "high", 0),
+        (Task.priority == "medium", 1),
+        else_=2,
+    )
+    return list(
+        db.scalars(
+            select(Task).order_by(
+                Task.status.asc(),
+                Task.deadline.is_(None),
+                Task.deadline.asc(),
+                priority_rank,
+                Task.created_at.desc(),
+            )
+        )
+    )
 
 
-def create_task(db: Session, title: str, status: str = "todo") -> Task:
-    task = Task(title=title, status=status)
+def create_task(
+    db: Session,
+    title: str,
+    status: str = "todo",
+    priority: str = "medium",
+    task_type: str = "work",
+    deadline: datetime | None = None,
+) -> Task:
+    task = Task(title=title, status=status, priority=priority, task_type=task_type, deadline=deadline)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -250,7 +272,15 @@ def find_task_by_title(db: Session, title: str) -> Task | None:
     return db.scalar(statement)
 
 
-def update_task(db: Session, task_id: int, title: str | None = None, status: str | None = None) -> Task | None:
+def update_task(
+    db: Session,
+    task_id: int,
+    title: str | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    task_type: str | None = None,
+    deadline: datetime | None = None,
+) -> Task | None:
     task = db.get(Task, task_id)
     if not task:
         return None
@@ -258,6 +288,12 @@ def update_task(db: Session, task_id: int, title: str | None = None, status: str
         task.title = title
     if status is not None:
         task.status = status
+    if priority is not None:
+        task.priority = priority
+    if task_type is not None:
+        task.task_type = task_type
+    if deadline is not None or deadline is None:
+        task.deadline = deadline
     db.add(task)
     db.commit()
     db.refresh(task)

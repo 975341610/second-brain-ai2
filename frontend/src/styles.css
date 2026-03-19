@@ -48,6 +48,481 @@ textarea {
   padding: 0.1rem 0.35rem;
 }
 
+.tiptap-editor h1,
+.tiptap-preview h1,
+.tiptap-editor h2,
+.tiptap-preview h2,
+.tiptap-editor h3,
+.tiptap-preview h3 {
+  margin: 1rem 0 0.75rem;
+  font-family: Georgia, serif;
+}
+
+.tiptap-editor p,
+.tiptap-preview p,
+.tiptap-editor ul,
+.tiptap-preview ul,
+.tiptap-editor ol,
+.tiptap-preview ol,
+.tiptap-editor table,
+.tiptap-preview table {
+  margin: 0.75rem 0;
+}
+
+.tiptap-editor table,
+.tiptap-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 0.9rem;
+  overflow: hidden;
+  background: rgba(251, 251, 250, 0.98);
+  box-shadow: inset 0 0 0 1px rgba(87, 83, 78, 0.08);
+}
+
+.tiptap-editor th,
+.tiptap-editor td,
+.tiptap-preview th,
+.tiptap-preview td {
+  border: 1px solid rgba(87, 83, 78, 0.14);
+  padding: 0.65rem 0.8rem;
+  min-width: 120px;
+}
+
+.tiptap-editor th,
+.tiptap-preview th {
+  background: rgba(245, 245, 244, 0.92);
+  font-weight: 600;
+  color: #44403c;
+  position: relative;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  padding-top: 1.1rem;
+  padding-right: 2rem;
+  cursor: pointer;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.tiptap-editor th::before,
+.tiptap-preview th::before {
+  content: attr(data-property-type-label);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 0.15rem 0.45rem;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a8a29e;
+}
+
+.tiptap-editor th[data-property-type='text']::before,
+.tiptap-preview th[data-property-type='text']::before {
+  content: 'Aa 文本';
+}
+
+.tiptap-editor td[data-property-type='text'],
+.tiptap-preview td[data-property-type='text'] {
+  color: #44403c;
+}
+
+.tiptap-editor th[data-property-type='number']::before,
+.tiptap-preview th[data-property-type='number']::before {
+  content: '# 数字';
+}
+
+.tiptap-editor td[data-property-type='number'],
+.tiptap-preview td[data-property-type='number'] {
+  font-variant-numeric: tabular-nums;
+  color: #c2410c;
+  text-align: right;
+}
+
+.tiptap-editor th[data-property-type='select']::before,
+.tiptap-preview th[data-property-type='select']::before {
+  content: '◉ 选项';
+}
+
+.tiptap-editor td[data-property-type='select'],
+.tiptap-preview td[data-property-type='select'] {
+  color: #047857;
+  background: rgba(248, 250, 252, 0.92);
+  white-space: normal;
+}
+
+.tiptap-editor td[data-property-type='select'],
+.tiptap-preview td[data-property-type='select'] {
+  font-weight: 600;
+}
+
+.tiptap-editor th[data-property-type='date']::before,
+.tiptap-preview th[data-property-type='date']::before {
+  content: '📅 日期';
+}
+
+.tiptap-editor td[data-property-type='date'],
+.tiptap-preview td[data-property-type='date'] {
+  background: rgba(248, 250, 252, 0.92);
+  color: #2563eb;
+  white-space: nowrap;
+}
+
+.tiptap-editor th[data-property-type='checkbox']::before,
+.tiptap-preview th[data-property-type='checkbox']::before {
+  content: '☑ 勾选';
+}
+
+.tiptap-editor td[data-property-type='checkbox'],
+.tiptap-preview td[data-property-type='checkbox'] {
+  text-align: center;
+  background: rgba(248, 250, 252, 0.92);
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.tiptap-editor th::after,
+.tiptap-preview th::after {
+  content: '⋯';
+  position: absolute;
+  right: 0.7rem;
+  top: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.15rem;
+  width: 1.15rem;
+  border-radius: 999px;
+  color: #a8a29e;
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease;
+  transform: scale(0.96);
+}
+
+.tiptap-editor th:hover::after,
+.tiptap-preview th:hover::after {
+  opacity: 1;
+  background: rgba(87, 83, 78, 0.08);
+  color: #57534e;
+  transform: scale(1);
+}
+
+.tiptap-editor th:hover,
+.tiptap-preview th:hover {
+  background: rgba(241, 245, 249, 0.92);
+  box-shadow: inset 0 -1px 0 rgba(120, 113, 108, 0.08);
+}
+
+.tiptap-editor th:hover::before,
+.tiptap-preview th:hover::before {
+  background: rgba(255, 255, 255, 0.96);
+  color: #78716c;
+}
+
+.tiptap-editor tbody tr,
+.tiptap-preview tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.tiptap-editor tbody tr:hover,
+.tiptap-preview tbody tr:hover {
+  background: rgba(245, 245, 244, 0.76);
+}
+
+.tiptap-editor tbody tr:hover td,
+.tiptap-preview tbody tr:hover td {
+  background: transparent;
+}
+
+.tiptap-editor table:hover,
+.tiptap-preview table:hover {
+  box-shadow: 0 0 0 1px rgba(87, 83, 78, 0.12);
+}
+
+.tiptap-editor td.selectedCell,
+.tiptap-editor th.selectedCell,
+.tiptap-preview td.selectedCell,
+.tiptap-preview th.selectedCell {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.table-inline-add {
+  position: absolute;
+  z-index: 16;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 229, 228, 0.9);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.28rem 0.65rem;
+  font-size: 12px;
+  color: #57534e;
+  box-shadow: 0 8px 20px rgba(28, 25, 23, 0.08);
+}
+
+.table-inline-add:hover {
+  background: rgba(245, 245, 244, 0.96);
+  color: #1c1917;
+}
+
+.tiptap-editor th[data-property-type='select']::before,
+.tiptap-preview th[data-property-type='select']::before {
+  background: rgba(236, 253, 245, 0.9);
+  color: #047857;
+}
+
+.tiptap-editor th[data-property-type='date']::before,
+.tiptap-preview th[data-property-type='date']::before {
+  background: rgba(239, 246, 255, 0.92);
+  color: #2563eb;
+}
+
+.tiptap-editor th[data-property-type='checkbox']::before,
+.tiptap-preview th[data-property-type='checkbox']::before {
+  background: rgba(250, 245, 255, 0.92);
+  color: #7c3aed;
+}
+
+.tiptap-editor th[data-property-type='number']::before,
+.tiptap-preview th[data-property-type='number']::before {
+  background: rgba(255, 247, 237, 0.92);
+  color: #c2410c;
+}
+
+.tiptap-editor blockquote,
+.tiptap-preview blockquote,
+.callout-block {
+  border-left: 4px solid #f59e0b;
+  background: #fef3c7;
+  border-radius: 0 1rem 1rem 0;
+  padding: 0.9rem 1rem;
+}
+
+.tiptap-editor img,
+.tiptap-preview img,
+.embedded-video,
+.embedded-audio,
+.tiptap-editor iframe,
+.tiptap-preview iframe {
+  display: block;
+  max-width: 100%;
+  margin: 1rem 0;
+  border-radius: 1rem;
+}
+
+.media-node-view {
+  position: relative;
+  margin: 1rem 0;
+  border: 1px solid transparent;
+  border-radius: 1rem;
+}
+
+.media-node-view.is-selected {
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+.media-node-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.35rem 0.55rem;
+}
+
+.media-node-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(39, 36, 28, 0.08);
+  padding: 0.4rem;
+}
+
+.media-node-meta {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #78716c;
+}
+
+.media-node-inner,
+.media-node-audio {
+  display: block;
+  width: 100%;
+  border-radius: 1rem;
+}
+
+.media-node-resize {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  height: 16px;
+  width: 16px;
+  cursor: nwse-resize;
+  border-radius: 999px;
+  background: #111827;
+}
+
+.notion-drag-handle {
+  z-index: 15;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.notion-drag-handle.is-visible {
+  opacity: 1;
+}
+
+.notion-drag-handle > div {
+  transform: translateX(-12px);
+}
+
+.notion-block-toolbar {
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(231, 229, 228, 0.9);
+  transition: box-shadow 180ms ease, transform 180ms ease, opacity 180ms ease, background-color 180ms ease;
+}
+
+.notion-block-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.7rem;
+  padding: 0.35rem;
+  color: #78716c;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.notion-block-button:hover {
+  background: rgba(87, 83, 78, 0.06);
+  color: #292524;
+}
+
+.tiptap-editor > *:hover .notion-drag-handle,
+.ProseMirror-focused .notion-drag-handle.is-visible {
+  opacity: 1;
+}
+
+.tiptap-editor > * {
+  position: relative;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+  max-width: 100%;
+}
+
+.tiptap-editor > *:hover {
+  background: rgba(87, 83, 78, 0.035);
+}
+
+.tiptap-editor pre:hover,
+.tiptap-preview pre:hover,
+.tiptap-editor pre:focus-within,
+.tiptap-preview pre:focus-within {
+  background: #1f2937;
+  box-shadow: none;
+}
+
+.editor-pane.dragging-block .tiptap-editor > * {
+  opacity: 0.92;
+}
+
+.tiptap-editor .ProseMirror-selectednode:not(.media-node-view) {
+  outline: 2px solid rgba(16, 185, 129, 0.35);
+  border-radius: 0.75rem;
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.editor-drop-indicator {
+  position: absolute;
+  z-index: 12;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f59e0b, #10b981);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+  pointer-events: none;
+}
+
+.editor-icon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: rgba(255,255,255,0.92);
+  padding: 0.75rem;
+  color: #57534e;
+}
+
+.editor-icon-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #1f2937;
+  padding: 0.25rem 0.6rem;
+  font-size: 12px;
+  color: white;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.editor-icon-button:hover .editor-icon-tooltip {
+  opacity: 1;
+}
+
+.tiptap-editor {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.tiptap-editor p,
+.tiptap-preview p,
+.tiptap-editor li,
+.tiptap-preview li,
+.tiptap-editor td,
+.tiptap-preview td,
+.tiptap-editor th,
+.tiptap-preview th,
+.tiptap-editor h1,
+.tiptap-editor h2,
+.tiptap-editor h3,
+.tiptap-preview h1,
+.tiptap-preview h2,
+.tiptap-preview h3 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.tiptap-editor pre,
+.tiptap-preview pre {
+  overflow-x: auto;
+  border-radius: 1rem;
+  background: #1f2937;
+  color: #f8fafc;
+  padding: 1rem;
+}
+
+.tiptap-preview {
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.tiptap-editor a,
+.tiptap-preview a {
+  color: #0f766e;
+  text-decoration: underline;
+}
+
 @media (max-width: 1279px) {
   .xl\:grid-cols-\[280px_minmax\(0\,1fr\)_360px\] {
     grid-template-columns: 1fr;

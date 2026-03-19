@@ -41,9 +41,9 @@ export const api = {
   purgeNote: (noteId: number) => request(`/notes/${noteId}/purge`, { method: 'DELETE' }),
   getTrash: () => request<TrashState>('/trash'),
   listTasks: () => request<Task[]>('/tasks'),
-  createTask: (payload: { title: string; status?: string }) =>
+  createTask: (payload: { title: string; status?: string; priority?: string; task_type?: string; deadline?: string | null }) =>
     request<Task>('/tasks', { method: 'POST', body: JSON.stringify(payload) }),
-  updateTask: (taskId: number, payload: { title?: string; status?: string }) =>
+  updateTask: (taskId: number, payload: { title?: string; status?: string; priority?: string; task_type?: string; deadline?: string | null }) =>
     request<Task>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   ask: (payload: { question: string; mode: 'chat' | 'rag' | 'agent' }) =>
     request<AskResponse>('/ask', { method: 'POST', body: JSON.stringify(payload) }),

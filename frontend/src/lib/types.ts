@@ -10,6 +10,13 @@ export type Note = {
   position: number;
   created_at: string;
   deleted_at?: string | null;
+  is_draft?: boolean;
+};
+
+export type OutlineItem = {
+  id: string;
+  text: string;
+  level: number;
 };
 
 export type Notebook = {
@@ -29,6 +36,9 @@ export type Task = {
   id: number;
   title: string;
   status: 'todo' | 'doing' | 'done';
+  priority: 'low' | 'medium' | 'high';
+  task_type: 'meeting' | 'work' | 'travel' | 'errand' | 'study' | 'personal';
+  deadline: string | null;
   created_at: string;
 };
 
@@ -44,6 +54,22 @@ export type AskResponse = {
   answer: string;
   citations: Citation[];
   mode: string;
+};
+
+export type ChatMessage = {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: Citation[];
+  mode?: 'chat' | 'rag' | 'agent';
+  created_at: string;
+};
+
+export type ChatSession = {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  updated_at: string;
 };
 
 export type ModelConfig = {

@@ -1,9 +1,11 @@
-import { BookCopy, ChevronDown, ChevronRight, FolderPlus, MoreHorizontal, Plus, Search, Trash2, UploadCloud, X } from 'lucide-react';
+import { BookCopy, ChevronDown, ChevronRight, FolderPlus, Home, MoreHorizontal, Plus, Search, Settings, Trash2, UploadCloud, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { defaultIconFor, isDataIcon, validateExistingDataIcon, validateIconFile } from '../lib/iconUtils';
 import type { Note, Notebook, Task, TrashState } from '../lib/types';
 
 type SidebarProps = {
+  activePage: 'home' | 'notes' | 'settings';
+  onChangePage: (page: 'home' | 'notes' | 'settings') => void;
   notes: Note[];
   notebooks: Notebook[];
   tasks: Task[];
@@ -32,6 +34,8 @@ type SidebarProps = {
 };
 
 export function Sidebar({
+  activePage,
+  onChangePage,
   notes,
   notebooks,
   tasks,
@@ -175,23 +179,35 @@ export function Sidebar({
   };
 
   return (
-    <aside className="flex h-full flex-col gap-6 rounded-[28px] border border-white/60 bg-[rgba(253,250,242,0.88)] p-5 shadow-soft backdrop-blur">
-      <div>
-        <div className="text-xs uppercase tracking-[0.35em] text-stone-500">Second Brain</div>
-        <h1 className="mt-3 font-display text-3xl text-stone-900">第二大脑</h1>
+    <aside className="flex h-full flex-col gap-4 rounded-[22px] border border-stone-200/80 bg-[rgba(255,255,255,0.78)] p-4 shadow-[0_12px_30px_rgba(28,25,23,0.06)] backdrop-blur">
+      <div className="px-1">
+        <div className="text-[11px] uppercase tracking-[0.28em] text-stone-400">Second Brain</div>
+        <h1 className="mt-2 font-display text-2xl text-stone-900">第二大脑</h1>
+      </div>
+
+      <div className="grid gap-1 rounded-[18px] bg-stone-50 p-1.5">
+        <button onClick={() => onChangePage('home')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'home' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><Home size={15} /> 主页</span></button>
+        <button onClick={() => onChangePage('notes')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'notes' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><BookCopy size={15} /> 笔记</span></button>
       </div>
 
       <div className="flex gap-2">
-        <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-sm font-medium text-stone-50" onClick={onCreateNote}>
+        {activePage === 'notes' && (
+        <button className="flex flex-1 items-center justify-center gap-2 rounded-[16px] bg-stone-900 px-4 py-2.5 text-sm font-medium text-stone-50" onClick={onCreateNote}>
           <Plus size={16} /> 新建
         </button>
-        <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-stone-300 px-4 py-3 text-stone-700">
+        )}
+        <label className="flex cursor-pointer items-center justify-center rounded-[16px] border border-stone-300 bg-white px-4 py-2.5 text-stone-700">
           <UploadCloud size={16} />
           <input className="hidden" multiple type="file" accept=".txt,.md,.pdf" onChange={handleUpload} />
         </label>
+        <button onClick={() => onChangePage('settings')} className={`flex items-center justify-center rounded-[16px] border bg-white px-4 py-2.5 ${activePage === 'settings' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-stone-700'}`}>
+          <Settings size={16} />
+        </button>
       </div>
 
-      <div className="rounded-2xl border border-stone-200 bg-white/75 px-3 py-3">
+      {activePage === 'notes' && (
+      <>
+      <div className="rounded-[18px] border border-stone-200 bg-white px-3 py-3">
         <div className="flex items-center gap-2 text-stone-500">
           <Search size={16} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="搜索标题、摘要或内容" />
@@ -213,7 +229,7 @@ export function Sidebar({
       </div>
 
       <section className="min-h-0 flex-1 overflow-hidden">
-        <div className="mb-3 flex items-center justify-between gap-2 text-sm font-medium text-stone-500">
+        <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-stone-500">
           <div className="flex items-center gap-2"><BookCopy size={16} /> 笔记本</div>
           <button onClick={() => setShowNotebookCreator(true)} className="rounded-full bg-stone-900 px-3 py-1 text-xs text-white"><span className="flex items-center gap-1"><FolderPlus size={12} /> 新建本</span></button>
         </div>
@@ -244,14 +260,14 @@ export function Sidebar({
           </div>
         )}
 
-        <div className="flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1">
+        <div className="flex max-h-[470px] flex-col gap-2 overflow-y-auto pr-1">
           {filteredNotes.length === 0 && <div className="rounded-2xl bg-white/70 px-4 py-4 text-sm text-stone-500">没有匹配的笔记，试试换个关键词或标签。</div>}
           {notebooks.map((notebook) => {
             const notebookNotes = notesByNotebook.get(notebook.id) || [];
             const isCollapsed = collapsed[notebook.id];
             const notebookEditing = editingNotebookId === notebook.id;
             return (
-              <div key={notebook.id} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingNoteId === null) return; onMoveNote(draggingNoteId, notebook.id, notebookNotes.length); setDraggingNoteId(null); }} className="rounded-[24px] border border-stone-200 bg-white/70 p-3">
+              <div key={notebook.id} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingNoteId === null) return; onMoveNote(draggingNoteId, notebook.id, notebookNotes.length); setDraggingNoteId(null); }} className="rounded-[18px] border border-stone-200 bg-white p-3">
                 {notebookEditing ? (
                   <div className="space-y-2 rounded-2xl bg-stone-50 p-3">
                     {editingNotebookMode === 'rename' ? (
@@ -299,7 +315,7 @@ export function Sidebar({
                         {notebookNotes.map((note, index) => {
                           const noteEditing = editingNoteId === note.id;
                           return (
-                            <div key={note.id} className={`group rounded-2xl border px-3 py-3 transition ${note.id === selectedNoteId ? 'border-amber-300 bg-amber-50' : 'border-transparent bg-stone-50 hover:border-stone-200 hover:bg-white'}`} draggable onDragStart={() => setDraggingNoteId(note.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingNoteId === null || draggingNoteId === note.id) return; onMoveNote(draggingNoteId, notebook.id, index); setDraggingNoteId(null); }}>
+                          <div key={note.id} className={`group rounded-[16px] border px-3 py-2.5 transition ${note.id === selectedNoteId ? 'border-stone-300 bg-stone-100' : 'border-transparent bg-stone-50/80 hover:border-stone-200 hover:bg-white'}`} draggable onDragStart={() => setDraggingNoteId(note.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingNoteId === null || draggingNoteId === note.id) return; onMoveNote(draggingNoteId, notebook.id, index); setDraggingNoteId(null); }}>
                               <div className="flex items-start gap-2">
                                 <input type="checkbox" checked={selectedNoteIds.includes(note.id)} onChange={() => onToggleNoteSelection(note.id)} className="mt-1" />
                                 <div className="flex-1">
@@ -320,9 +336,9 @@ export function Sidebar({
                                       </div>
                                     </div>
                                   ) : (
-                                    <button onClick={() => onSelectNote(note.id)} className="w-full text-left">
+                                    <button onClick={() => onSelectNote(note.id)} className="block w-full min-w-0 text-left">
                                       <div className="truncate text-sm font-medium text-stone-800">{isDataIcon(note.icon) ? '' : note.icon} {note.title}</div>
-                                      <div className="mt-1 line-clamp-2 text-xs text-stone-500">{note.summary}</div>
+                                      <div className="mt-1 text-[11px] text-stone-400">笔记</div>
                                     </button>
                                   )}
                                 </div>
@@ -384,17 +400,8 @@ export function Sidebar({
         )}
       </section>
 
-      <section>
-        <div className="mb-3 text-sm font-medium text-stone-500">待办</div>
-        <div className="space-y-2">
-          {tasks.slice(0, 4).map((task) => (
-            <div key={task.id} className="rounded-2xl bg-white/70 px-4 py-3 text-sm text-stone-700">
-              <div>{task.title}</div>
-              <div className="mt-1 text-xs uppercase tracking-[0.25em] text-stone-400">{task.status}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+      </>
+      )}
     </aside>
   );
 }

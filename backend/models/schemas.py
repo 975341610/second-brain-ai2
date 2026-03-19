@@ -48,6 +48,9 @@ class NoteResponse(NoteBase):
 class TaskBase(BaseModel):
     title: str
     status: Literal["todo", "doing", "done"] = "todo"
+    priority: Literal["low", "medium", "high"] = "medium"
+    task_type: Literal["meeting", "work", "travel", "errand", "study", "personal"] = "work"
+    deadline: datetime | None = None
 
 
 class TaskCreate(TaskBase):
@@ -57,6 +60,9 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     title: str | None = None
     status: Literal["todo", "doing", "done"] | None = None
+    priority: Literal["low", "medium", "high"] | None = None
+    task_type: Literal["meeting", "work", "travel", "errand", "study", "personal"] | None = None
+    deadline: datetime | None = None
 
 
 class TaskResponse(TaskBase):

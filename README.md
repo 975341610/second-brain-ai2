@@ -66,6 +66,23 @@ npm run dev
 
 Frontend runs at `http://127.0.0.1:5173`.
 
+### 3. Stable Local Web
+
+If you want a more stable local preview without relying on the Vite dev server, use the backend-served build:
+
+```bash
+cd /home/cai/second-brain-ai
+./run_local_web.sh
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+This mode builds the frontend once, serves it from FastAPI, and is more stable for long manual testing sessions.
+
 ## Default Model Behavior
 
 - Default provider: `openclaw`

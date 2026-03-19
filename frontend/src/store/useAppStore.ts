@@ -1,6 +1,59 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
-import type { AskResponse, ModelConfig, Note, Notebook, Task, ToastMessage, TrashState } from '../lib/types';
+import type { AskResponse, ChatMessage, ChatSession, ModelConfig, Note, Notebook, Task, ToastMessage, TrashState } from '../lib/types';
+
+const CHAT_STORAGE_KEY = 'second-brain-chat-sessions';
+
+type StoredChatState = {
+  sessions: ChatSession[];
+  activeSessionId: string | null;
+};
+
+function createSession(title = '新会话'): ChatSession {
+  return { id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, messages: [], updated_at: new Date().toISOString() };
+}
+
+function readStoredChats(): StoredChatState {
+  if (typeof window === 'undefined') {
+    const session = createSession();
+    return { sessions: [session], activeSessionId: session.id };
+  }
+  try {
+    const raw = window.localStorage.getItem(CHAT_STORAGE_KEY);
+    if (!raw) {
+      const session = createSession();
+      return { sessions: [session], activeSessionId: session.id };
+    }
+    const parsed = JSON.parse(raw) as StoredChatState;
+    if (!parsed.sessions?.length) {
+      const session = createSession();
+      return { sessions: [session], activeSessionId: session.id };
+    }
+    return parsed;
+  } catch {
+    const session = createSession();
+    return { sessions: [session], activeSessionId: session.id };
+  }
+}
+
+function writeStoredChats(sessions: ChatSession[], activeSessionId: string | null) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ sessions, activeSessionId }));
+}
+
+function latestAssistantFromSession(session: ChatSession | undefined): AskResponse | null {
+  if (!session) return null;
+  const assistantMessages = session.messages.filter((msg) => msg.role === 'assistant');
+  const last = assistantMessages[assistantMessages.length - 1];
+  if (!last) return null;
+  return {
+    answer: last.content,
+    citations: last.citations || [],
+    mode: last.mode || 'chat',
+  };
+}
+
+const initialChats = readStoredChats();
 
 type AppState = {
   notes: Note[];
@@ -9,7 +62,10 @@ type AppState = {
   selectedNoteIds: number[];
   tasks: Task[];
   selectedNoteId: number | null;
+  recentNoteIds: number[];
   assistant: AskResponse | null;
+  chatSessions: ChatSession[];
+  activeChatSessionId: string;
   loading: boolean;
   isSavingNote: boolean;
   isUploading: boolean;
@@ -17,6 +73,7 @@ type AppState = {
   modelConfig: ModelConfig;
   loadInitialData: () => Promise<void>;
   selectNote: (noteId: number) => void;
+  createDraftNote: (notebookId?: number | null) => void;
   saveNote: (payload: { id?: number; title: string; content: string; notebookId?: number | null; icon?: string; silent?: boolean }) => Promise<void>;
   createNotebook: (name: string) => Promise<void>;
   updateNotebook: (notebookId: number, payload: { name?: string; icon?: string }) => Promise<void>;
@@ -31,11 +88,16 @@ type AppState = {
   deleteNote: (noteId: number) => Promise<void>;
   restoreNote: (noteId: number) => Promise<void>;
   purgeNote: (noteId: number) => Promise<void>;
-  createTask: (title: string) => Promise<void>;
+  createTask: (payload: { title: string; priority: Task['priority']; task_type: Task['task_type']; deadline: string | null }) => Promise<void>;
   updateTaskStatus: (taskId: number, status: Task['status']) => Promise<void>;
   askAssistant: (question: string, mode: 'chat' | 'rag' | 'agent') => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
   updateModelConfig: (payload: ModelConfig) => Promise<void>;
+  startNewChat: () => void;
+  setActiveChatSession: (sessionId: string) => void;
+  clearActiveChat: () => void;
+  renameChatSession: (sessionId: string, title: string) => void;
+  deleteChatSession: (sessionId: string) => void;
   notify: (message: string) => void;
   clearToast: () => void;
 };
@@ -54,7 +116,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedNoteIds: [],
   tasks: [],
   selectedNoteId: null,
+  recentNoteIds: [],
   assistant: null,
+  chatSessions: initialChats.sessions,
+  activeChatSessionId: initialChats.activeSessionId || initialChats.sessions[0].id,
   loading: false,
   isSavingNote: false,
   isUploading: false,
@@ -71,6 +136,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         trash,
         modelConfig,
         selectedNoteId: notes[0]?.id ?? null,
+        assistant: latestAssistantFromSession(get().chatSessions.find((session) => session.id === get().activeChatSessionId)),
       });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `初始化失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
@@ -78,15 +144,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ loading: false });
     }
   },
-  selectNote: (selectedNoteId) => set({ selectedNoteId }),
+  selectNote: (selectedNoteId) => set((state) => ({ selectedNoteId, recentNoteIds: [selectedNoteId, ...state.recentNoteIds.filter((id) => id !== selectedNoteId)].slice(0, 8) })),
+  createDraftNote: (notebookId) => {
+    const targetNotebookId = notebookId ?? get().notebooks[0]?.id ?? null;
+    const draftId = -Date.now();
+    const draft: Note = {
+      id: draftId,
+      title: '未命名笔记',
+      icon: '📝',
+      content: '<h1>新建笔记</h1><p>从这里开始记录你的想法。</p>',
+      summary: '新建草稿',
+      tags: [],
+      links: [],
+      notebook_id: targetNotebookId,
+      position: 0,
+      created_at: new Date().toISOString(),
+      is_draft: true,
+    };
+    set({ notes: [draft, ...get().notes], selectedNoteId: draftId });
+  },
   saveNote: async ({ id, title, content, notebookId, icon, silent }) => {
     set({ isSavingNote: true });
     try {
-      const note = id ? await api.updateNote(id, { title, content, icon }) : await api.createNote({ title, content, notebook_id: notebookId ?? get().notebooks[0]?.id ?? null, icon });
-      const notes = id
-        ? get().notes.map((item) => (item.id === note.id ? note : item))
-        : [note, ...get().notes];
-      set({ notes, selectedNoteId: note.id, toast: silent ? get().toast : { id: Date.now(), tone: 'success', text: id ? '笔记已保存。' : '新笔记已创建。' } });
+      const isDraft = typeof id === 'number' && id < 0;
+      const note = !id || isDraft
+        ? await api.createNote({ title, content, notebook_id: notebookId ?? get().notes.find((item) => item.id === id)?.notebook_id ?? get().notebooks[0]?.id ?? null, icon })
+        : await api.updateNote(id, { title, content, icon });
+      const currentNotes = get().notes;
+      const withoutOriginal = typeof id === 'number' ? currentNotes.filter((item) => item.id !== id) : currentNotes;
+      const hasTarget = withoutOriginal.some((item) => item.id === note.id);
+      const notes = hasTarget
+        ? withoutOriginal.map((item) => (item.id === note.id ? note : item))
+        : [note, ...withoutOriginal];
+      set({ notes, selectedNoteId: note.id, toast: silent ? get().toast : { id: Date.now(), tone: 'success', text: id && !isDraft ? '笔记已保存。' : '新笔记已创建。' } });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `保存失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     } finally {
@@ -201,19 +291,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ toast: { id: Date.now(), tone: 'error', text: `永久删除笔记失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
-  createTask: async (title) => {
+  createTask: async ({ title, priority, task_type, deadline }) => {
     try {
-      const task = await api.createTask({ title, status: 'todo' });
-      set({ tasks: [task, ...get().tasks], toast: { id: Date.now(), tone: 'success', text: '任务已添加。' } });
+      await api.createTask({ title, status: 'todo', priority, task_type, deadline });
+      const tasks = await api.listTasks();
+      set({ tasks, toast: { id: Date.now(), tone: 'success', text: '任务已添加。' } });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `创建任务失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
   updateTaskStatus: async (taskId, status) => {
     try {
-      const task = await api.updateTask(taskId, { status });
+      await api.updateTask(taskId, { status });
+      const tasks = await api.listTasks();
       set({
-        tasks: get().tasks.map((item) => (item.id === task.id ? task : item)),
+        tasks,
         toast: { id: Date.now(), tone: 'success', text: `任务已更新为${status === 'todo' ? '待开始' : status === 'doing' ? '进行中' : '已完成'}。` },
       });
     } catch (error) {
@@ -223,9 +315,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   askAssistant: async (question, mode) => {
     set({ loading: true });
     try {
+      const activeId = get().activeChatSessionId;
+      const userMessage: ChatMessage = { id: Date.now(), role: 'user', content: question, mode, created_at: new Date().toISOString() };
+      const sessionsWithUser = get().chatSessions.map((session) => session.id === activeId ? { ...session, messages: [...session.messages, userMessage], updated_at: new Date().toISOString(), title: session.messages.length === 0 ? question.slice(0, 16) || '新会话' : session.title } : session);
+      writeStoredChats(sessionsWithUser, activeId);
+      set({ chatSessions: sessionsWithUser });
       const assistant = await api.ask({ question, mode });
       const tasks = mode === 'agent' ? await api.listTasks() : get().tasks;
-      set({ assistant, tasks, toast: { id: Date.now(), tone: 'success', text: mode === 'agent' ? '智能体规划已生成。' : 'AI 回答已返回。' } });
+      const assistantMessage: ChatMessage = { id: Date.now() + 1, role: 'assistant', content: assistant.answer, citations: assistant.citations, mode: assistant.mode as 'chat' | 'rag' | 'agent', created_at: new Date().toISOString() };
+      const updatedSessions = get().chatSessions.map((session) => session.id === activeId ? { ...session, messages: [...session.messages, assistantMessage], updated_at: new Date().toISOString() } : session);
+      writeStoredChats(updatedSessions, activeId);
+      set({ assistant, tasks, chatSessions: updatedSessions, toast: { id: Date.now(), tone: 'success', text: mode === 'agent' ? '智能体规划已生成。' : 'AI 回答已返回。' } });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `提问失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     } finally {
@@ -251,6 +351,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `模型设置保存失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
+  },
+  startNewChat: () => {
+    const session = createSession();
+    const sessions = [session, ...get().chatSessions];
+    writeStoredChats(sessions, session.id);
+    set({ chatSessions: sessions, activeChatSessionId: session.id, assistant: null });
+  },
+  setActiveChatSession: (sessionId) => {
+    const session = get().chatSessions.find((item) => item.id === sessionId);
+    writeStoredChats(get().chatSessions, sessionId);
+    set({ activeChatSessionId: sessionId, assistant: latestAssistantFromSession(session) });
+  },
+  clearActiveChat: () => {
+    const sessions = get().chatSessions.map((session) => session.id === get().activeChatSessionId ? { ...session, messages: [], title: '新会话', updated_at: new Date().toISOString() } : session);
+    writeStoredChats(sessions, get().activeChatSessionId);
+    set({ chatSessions: sessions, assistant: null });
+  },
+  renameChatSession: (sessionId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const sessions = get().chatSessions.map((session) => session.id === sessionId ? { ...session, title: trimmed, updated_at: new Date().toISOString() } : session);
+    writeStoredChats(sessions, get().activeChatSessionId);
+    set({ chatSessions: sessions, toast: { id: Date.now(), tone: 'success', text: '会话已重命名。' } });
+  },
+  deleteChatSession: (sessionId) => {
+    const remaining = get().chatSessions.filter((session) => session.id !== sessionId);
+    const nextSessions = remaining.length > 0 ? remaining : [createSession()];
+    const nextActive = get().activeChatSessionId === sessionId ? nextSessions[0].id : get().activeChatSessionId;
+    writeStoredChats(nextSessions, nextActive);
+    set({
+      chatSessions: nextSessions,
+      activeChatSessionId: nextActive,
+      assistant: latestAssistantFromSession(nextSessions.find((session) => session.id === nextActive)),
+      toast: { id: Date.now(), tone: 'success', text: '会话已删除。' },
+    });
   },
   notify: (message) => set({ toast: { id: Date.now(), tone: 'info', text: message } }),
   clearToast: () => set({ toast: null }),
