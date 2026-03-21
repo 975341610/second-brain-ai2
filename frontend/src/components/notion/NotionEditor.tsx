@@ -106,12 +106,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     { group: '标题', label: '标题 2', description: '中等标题', icon: <Heading2 size={18} />, keywords: ['h2', 'bt2'], action: (c) => c.toggleHeading({ level: 2 }) },
     { group: '标题', label: '标题 3', description: '小标题', icon: <Heading3 size={18} />, keywords: ['h3', 'bt3'], action: (c) => c.toggleHeading({ level: 3 }) },
     { group: '列表', label: '任务列表', description: '带复选框的任务', icon: <CheckSquare size={18} />, keywords: ['todo', 'task', 'rw'], action: (c) => c.toggleTaskList() },
+    { group: '内容', label: '表格', description: '3x3 的标准表格', icon: <Table size={18} />, keywords: ['table', 'bg'], action: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
     { group: '列表', label: '无序列表', description: '普通的圆点列表', icon: <List size={18} />, keywords: ['ul', 'list', 'lb'], action: (c) => c.toggleBulletList() },
     { group: '列表', label: '有序列表', description: '带数字的列表', icon: <ListOrdered size={18} />, keywords: ['ol', 'number', 'lb'], action: (c) => c.toggleOrderedList() },
     { group: '内容', label: '引用', description: '插入一段引用', icon: <Quote size={18} />, keywords: ['quote', 'yy'], action: (c) => c.toggleBlockquote() },
     { group: '内容', label: '代码块', description: '带语法的代码块', icon: <FileCode size={18} />, keywords: ['code', 'dm'], action: (c) => c.toggleCodeBlock() },
     { group: '内容', label: '分割线', description: '水平分割线', icon: <Minus size={18} />, keywords: ['hr', 'fgx'], action: (c) => c.setHorizontalRule() },
-    { group: '内容', label: '表格', description: '3x3 的标准表格', icon: <Table size={18} />, keywords: ['table', 'bg'], action: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
     { group: '高级', label: '子页面', description: '在当前位置新建子页面', icon: <Plus size={18} className="text-amber-600" />, keywords: ['page', 'sub', 'zym'], action: () => {
       const currentNote = noteRef.current;
       if (currentNote) onCreateSubPageRef.current(currentNote.id);
@@ -137,6 +137,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       listItem: false,
       blockquote: false,
       codeBlock: false,
+      history: true,
     }),
     BulletList.configure({
       HTMLAttributes: { class: 'notion-bullet-list' },

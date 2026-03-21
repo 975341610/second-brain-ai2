@@ -121,7 +121,7 @@ export const getSuggestionConfig = (itemsRef: React.MutableRefObject<SlashItem[]
     return items.filter(item => {
       const q = query.toLowerCase();
       return item.label.toLowerCase().includes(q) || item.keywords.some(k => k.toLowerCase().includes(q));
-    }).slice(0, 10);
+    }).slice(0, 20);
   },
 
   render: () => {
