@@ -1,12 +1,23 @@
+export type NoteProperty = {
+  id: number;
+  note_id: number;
+  name: string;
+  type: 'text' | 'number' | 'date' | 'select' | 'multi_select';
+  value: string;
+};
+
 export type Note = {
   id: number;
   title: string;
   icon: string;
   content: string;
   summary: string;
+  is_title_manually_edited: boolean;
   tags: string[];
+  properties: NoteProperty[];
   links: number[];
   notebook_id: number | null;
+  parent_id: number | null;
   position: number;
   created_at: string;
   deleted_at?: string | null;

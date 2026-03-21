@@ -1,9 +1,12 @@
+import type { ReactNode } from 'react';
+
 export type SlashItem = {
   group: string;
   label: string;
   description: string;
   keywords: string[];
-  action: () => void;
+  action: (chain: any) => void;
+  icon?: ReactNode;
 };
 
 export type MediaSelection = {

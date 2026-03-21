@@ -1,11 +1,11 @@
-import { BookCopy, ChevronDown, ChevronRight, FolderPlus, Home, MoreHorizontal, Plus, Search, Settings, Trash2, UploadCloud, X } from 'lucide-react';
+import { BookCopy, ChevronDown, ChevronRight, FolderPlus, Home, Layout, MoreHorizontal, Plus, Search, Settings, Trash2, UploadCloud, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { defaultIconFor, isDataIcon, validateExistingDataIcon, validateIconFile } from '../lib/iconUtils';
 import type { Note, Notebook, Task, TrashState } from '../lib/types';
 
 type SidebarProps = {
-  activePage: 'home' | 'notes' | 'settings';
-  onChangePage: (page: 'home' | 'notes' | 'settings') => void;
+  activePage: 'home' | 'notes' | 'settings' | 'database';
+  onChangePage: (page: 'home' | 'notes' | 'settings' | 'database') => void;
   notes: Note[];
   notebooks: Notebook[];
   tasks: Task[];
@@ -18,14 +18,14 @@ type SidebarProps = {
   onCreateNote: () => void;
   onCreateNotebook: (name: string) => void;
   onNotify: (message: string) => void;
-  onUpdateNote: (noteId: number, payload: { title?: string; icon?: string }) => void;
+  onUpdateNote: (noteId: number, payload: { title?: string; icon?: string; tags?: string[] }) => void;
   onUpdateNotebook: (notebookId: number, payload: { name?: string; icon?: string }) => void;
   onDeleteNotebook: (notebookId: number) => void;
   onRestoreNotebook: (notebookId: number) => void;
   onPurgeNotebook: (notebookId: number) => void;
-  onCreateNoteInNotebook: (notebookId: number) => void;
-  onMoveNote: (noteId: number, notebookId: number, position: number) => void;
-  onBulkMoveNotes: (notebookId: number) => void;
+  onCreateNoteInNotebook: (notebookId: number, parentId?: number | null) => void;
+  onMoveNote: (noteId: number, notebookId: number, position: number, parentId?: number | null) => void;
+  onBulkMoveNotes: (notebookId: number, parentId?: number | null) => void;
   onBulkDeleteNotes: () => void;
   onDeleteNote: (noteId: number) => void;
   onRestoreNote: (noteId: number) => void;
@@ -68,11 +68,13 @@ export function Sidebar({
   const [newNotebookName, setNewNotebookName] = useState('');
   const [showNotebookCreator, setShowNotebookCreator] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
+  const [collapsedNotes, setCollapsedNotes] = useState<Record<number, boolean>>({});
   const [showTrash, setShowTrash] = useState(false);
   const [bulkTargetNotebookId, setBulkTargetNotebookId] = useState<number | ''>('');
   const [draggingNoteId, setDraggingNoteId] = useState<number | null>(null);
   const [activeNotebookMenuId, setActiveNotebookMenuId] = useState<number | null>(null);
   const [activeNoteMenuId, setActiveNoteMenuId] = useState<number | null>(null);
+  const [dragOverNoteId, setDragOverNoteId] = useState<number | null>(null);
 
   const [editingNotebookId, setEditingNotebookId] = useState<number | null>(null);
   const [editingNotebookName, setEditingNotebookName] = useState('');
@@ -100,17 +102,28 @@ export function Sidebar({
     [notes, query, activeTag],
   );
 
-  const notesByNotebook = useMemo(() => {
+  const notesByParent = useMemo(() => {
+    const grouped = new Map<number | null, Note[]>();
+    filteredNotes.forEach((note) => {
+      const parentId = note.parent_id || null;
+      grouped.set(parentId, [...(grouped.get(parentId) || []), note]);
+    });
+    grouped.forEach((value) => value.sort((a, b) => a.position - b.position));
+    return grouped;
+  }, [filteredNotes]);
+
+  const rootNotesByNotebook = useMemo(() => {
     const grouped = new Map<number, Note[]>();
     notebooks.forEach((notebook) => grouped.set(notebook.id, []));
-    filteredNotes.forEach((note) => {
+    
+    const rootNotes = notesByParent.get(null) || [];
+    rootNotes.forEach((note) => {
       const notebookId = note.notebook_id ?? notebooks[0]?.id;
       if (!notebookId) return;
       grouped.set(notebookId, [...(grouped.get(notebookId) || []), note]);
     });
-    grouped.forEach((value) => value.sort((a, b) => a.position - b.position));
     return grouped;
-  }, [filteredNotes, notebooks]);
+  }, [notesByParent, notebooks]);
 
   useEffect(() => {
     notebooks.forEach((notebook) => {
@@ -178,6 +191,98 @@ export function Sidebar({
     return <span className="text-lg">{icon || fallback}</span>;
   };
 
+  const renderNoteTree = (note: Note, index: number, notebookId: number, level = 0) => {
+    const children = notesByParent.get(note.id) || [];
+    const isCollapsed = collapsedNotes[note.id];
+    const noteEditing = editingNoteId === note.id;
+    const isSelected = selectedNoteId === note.id;
+    const isDragOver = dragOverNoteId === note.id;
+
+    return (
+      <div key={note.id} className="group flex flex-col">
+        <div
+          className={`relative group rounded-[16px] border px-3 py-2 transition ${isSelected ? 'border-stone-300 bg-stone-100' : 'border-transparent bg-stone-50/50 hover:border-stone-200 hover:bg-white'} ${isDragOver ? 'ring-2 ring-amber-400' : ''}`}
+          style={{ marginLeft: `${level * 12}px` }}
+          draggable
+          onDragStart={() => setDraggingNoteId(note.id)}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragOverNoteId(note.id);
+          }}
+          onDragLeave={() => setDragOverNoteId(null)}
+          onDrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragOverNoteId(null);
+            if (draggingNoteId === null || draggingNoteId === note.id) return;
+            // Drop onto a note makes it the parent
+            onMoveNote(draggingNoteId, notebookId, children.length, note.id);
+            setDraggingNoteId(null);
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCollapsedNotes((prev) => ({ ...prev, [note.id]: !prev[note.id] }))}
+              className={`p-0.5 hover:bg-stone-200 rounded transition ${children.length === 0 ? 'invisible' : ''}`}
+            >
+              {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            </button>
+            <input type="checkbox" checked={selectedNoteIds.includes(note.id)} onChange={() => onToggleNoteSelection(note.id)} className="w-3.5 h-3.5" />
+            <div className="flex-1 min-w-0">
+              {noteEditing ? (
+                <div className="space-y-2 rounded-2xl bg-white p-3 shadow-sm border border-stone-100">
+                  {editingNoteMode === 'rename' ? (
+                    <input autoFocus value={editingNoteTitle} onChange={(event) => setEditingNoteTitle(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && (onUpdateNote(note.id, { title: editingNoteTitle }), setEditingNoteId(null))} className="w-full rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm" />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => noteIconInputRef.current?.click()} className="rounded-xl border border-stone-200 bg-white px-2 py-1.5 text-lg">{isDataIcon(editingNoteIcon) ? '📷' : editingNoteIcon}</button>
+                      <input autoFocus value={isDataIcon(editingNoteIcon) ? '' : editingNoteIcon} onChange={(event) => setEditingNoteIcon(event.target.value || defaultIconFor('note'))} className="w-full rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm" placeholder="输入 emoji" />
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-1.5">
+                    <button onClick={() => setEditingNoteId(null)} className="rounded-xl px-2.5 py-1 text-xs text-stone-500 hover:bg-stone-100">取消</button>
+                    <button onClick={() => { onUpdateNote(note.id, editingNoteMode === 'rename' ? { title: editingNoteTitle } : { icon: editingNoteIcon }); setEditingNoteId(null); }} className="rounded-xl bg-stone-900 px-2.5 py-1 text-xs text-white">保存</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => onSelectNote(note.id)} className="flex items-center gap-2 w-full text-left truncate">
+                  <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">{renderIcon(note.icon, defaultIconFor('note'))}</span>
+                  <span className="truncate text-sm font-medium text-stone-700">{note.title}</span>
+                </button>
+              )}
+            </div>
+            {!noteEditing && (
+              <div className="flex items-center gap-0.5">
+                <button onClick={() => onCreateNoteInNotebook(notebookId, note.id)} className="p-1 text-stone-400 opacity-0 group-hover:opacity-100 hover:bg-stone-200 rounded transition">
+                  <Plus size={14} />
+                </button>
+                <div className="relative">
+                  <button onClick={() => setActiveNoteMenuId(activeNoteMenuId === note.id ? null : note.id)} className="p-1 text-stone-400 opacity-0 group-hover:opacity-100 hover:bg-stone-200 rounded transition">
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {activeNoteMenuId === note.id && (
+                    <div className="absolute right-0 top-7 z-30 w-32 rounded-xl border border-stone-100 bg-white p-1 shadow-xl">
+                      <button onClick={() => { startNoteEdit(note, 'rename'); setActiveNoteMenuId(null); }} className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-stone-50">重命名</button>
+                      <button onClick={() => { startNoteEdit(note, 'icon'); setActiveNoteMenuId(null); }} className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-stone-50">更改图标</button>
+                      <div className="h-px bg-stone-100 my-1" />
+                      <button onClick={() => { onDeleteNote(note.id); setActiveNoteMenuId(null); }} className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-rose-600 hover:bg-rose-50">删除</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        {!isCollapsed && children.length > 0 && (
+          <div className="mt-0.5">
+            {children.map((child, idx) => renderNoteTree(child, idx, notebookId, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <aside className="flex h-full flex-col gap-4 rounded-[22px] border border-stone-200/80 bg-[rgba(255,255,255,0.78)] p-4 shadow-[0_12px_30px_rgba(28,25,23,0.06)] backdrop-blur">
       <div className="px-1">
@@ -188,6 +293,7 @@ export function Sidebar({
       <div className="grid gap-1 rounded-[18px] bg-stone-50 p-1.5">
         <button onClick={() => onChangePage('home')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'home' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><Home size={15} /> 主页</span></button>
         <button onClick={() => onChangePage('notes')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'notes' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><BookCopy size={15} /> 笔记</span></button>
+        <button onClick={() => onChangePage('database')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'database' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><Layout size={15} /> 数据库</span></button>
       </div>
 
       <div className="flex gap-2">
@@ -263,11 +369,11 @@ export function Sidebar({
         <div className="flex max-h-[470px] flex-col gap-2 overflow-y-auto pr-1">
           {filteredNotes.length === 0 && <div className="rounded-2xl bg-white/70 px-4 py-4 text-sm text-stone-500">没有匹配的笔记，试试换个关键词或标签。</div>}
           {notebooks.map((notebook) => {
-            const notebookNotes = notesByNotebook.get(notebook.id) || [];
+            const notebookNotes = rootNotesByNotebook.get(notebook.id) || [];
             const isCollapsed = collapsed[notebook.id];
             const notebookEditing = editingNotebookId === notebook.id;
             return (
-              <div key={notebook.id} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingNoteId === null) return; onMoveNote(draggingNoteId, notebook.id, notebookNotes.length); setDraggingNoteId(null); }} className="rounded-[18px] border border-stone-200 bg-white p-3">
+              <div key={notebook.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.stopPropagation(); if (draggingNoteId === null) return; onMoveNote(draggingNoteId, notebook.id, notebookNotes.length, null); setDraggingNoteId(null); }} className="rounded-[18px] border border-stone-200 bg-white p-3">
                 {notebookEditing ? (
                   <div className="space-y-2 rounded-2xl bg-stone-50 p-3">
                     {editingNotebookMode === 'rename' ? (
@@ -291,10 +397,12 @@ export function Sidebar({
                         {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
                         {renderIcon(notebook.icon, defaultIconFor('notebook'))}
                         <span>{notebook.name}</span>
-                        <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[11px] text-stone-600">{notebookNotes.length}</span>
+                        <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[11px] text-stone-600">
+                          {notes.filter(n => (n.notebook_id === notebook.id || (!n.notebook_id && notebook.name === '快速笔记')) && !n.deleted_at).length}
+                        </span>
                       </button>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => onCreateNoteInNotebook(notebook.id)} className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">+</button>
+                        <button onClick={() => onCreateNoteInNotebook(notebook.id, null)} className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">+</button>
                         <div className="group relative">
                           <button onClick={() => setActiveNotebookMenuId(activeNotebookMenuId === notebook.id ? null : notebook.id)} className="rounded-full p-1 text-stone-400 opacity-0 transition hover:bg-stone-200 hover:text-stone-700 group-hover:opacity-100">
                             <MoreHorizontal size={16} />
@@ -312,54 +420,7 @@ export function Sidebar({
 
                     {!isCollapsed && (
                       <div className="mt-3 space-y-2">
-                        {notebookNotes.map((note, index) => {
-                          const noteEditing = editingNoteId === note.id;
-                          return (
-                          <div key={note.id} className={`group rounded-[16px] border px-3 py-2.5 transition ${note.id === selectedNoteId ? 'border-stone-300 bg-stone-100' : 'border-transparent bg-stone-50/80 hover:border-stone-200 hover:bg-white'}`} draggable onDragStart={() => setDraggingNoteId(note.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingNoteId === null || draggingNoteId === note.id) return; onMoveNote(draggingNoteId, notebook.id, index); setDraggingNoteId(null); }}>
-                              <div className="flex items-start gap-2">
-                                <input type="checkbox" checked={selectedNoteIds.includes(note.id)} onChange={() => onToggleNoteSelection(note.id)} className="mt-1" />
-                                <div className="flex-1">
-                                  {noteEditing ? (
-                                    <div className="space-y-2 rounded-2xl bg-white p-3">
-                                      {editingNoteMode === 'rename' ? (
-                                        <input value={editingNoteTitle} onChange={(event) => setEditingNoteTitle(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" />
-                                      ) : (
-                                        <div className="flex items-center gap-2">
-                                          <button onClick={() => noteIconInputRef.current?.click()} className="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-lg">{isDataIcon(editingNoteIcon) ? '图片' : editingNoteIcon}</button>
-                                          <input value={isDataIcon(editingNoteIcon) ? '' : editingNoteIcon} onChange={(event) => setEditingNoteIcon(event.target.value || defaultIconFor('note'))} className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" placeholder="输入 emoji 图标" />
-                                          <input ref={noteIconInputRef} type="file" accept="image/*" className="hidden" onChange={handleNoteIconPick} />
-                                        </div>
-                                      )}
-                                      <div className="flex justify-end gap-2">
-                                        <button onClick={() => setEditingNoteId(null)} className="rounded-2xl border border-stone-200 px-3 py-2 text-sm text-stone-600">取消</button>
-                                        <button onClick={() => { onUpdateNote(note.id, editingNoteMode === 'rename' ? { title: editingNoteTitle } : { icon: editingNoteIcon }); setEditingNoteId(null); }} className="rounded-2xl bg-stone-900 px-3 py-2 text-sm text-white">保存</button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <button onClick={() => onSelectNote(note.id)} className="block w-full min-w-0 text-left">
-                                      <div className="truncate text-sm font-medium text-stone-800">{isDataIcon(note.icon) ? '' : note.icon} {note.title}</div>
-                                      <div className="mt-1 text-[11px] text-stone-400">笔记</div>
-                                    </button>
-                                  )}
-                                </div>
-                                {!noteEditing && (
-                                  <div className="relative">
-                                    <button onClick={() => setActiveNoteMenuId(activeNoteMenuId === note.id ? null : note.id)} className="rounded-full p-1 text-stone-400 opacity-0 transition hover:bg-stone-200 hover:text-stone-700 group-hover:opacity-100">
-                                      <MoreHorizontal size={16} />
-                                    </button>
-                                    {activeNoteMenuId === note.id && (
-                                      <div className="absolute right-0 top-8 z-20 w-36 rounded-2xl border border-stone-200 bg-white p-2 shadow-soft">
-                                        <button onClick={() => { startNoteEdit(note, 'rename'); setActiveNoteMenuId(null); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-stone-100">改名</button>
-                                        <button onClick={() => { startNoteEdit(note, 'icon'); setActiveNoteMenuId(null); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-stone-100">改图标</button>
-                                        <button onClick={() => { onDeleteNote(note.id); setActiveNoteMenuId(null); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">删除</button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {notebookNotes.map((note, idx) => renderNoteTree(note, idx, notebook.id, 0))}
                       </div>
                     )}
                   </>

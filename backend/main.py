@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,7 +20,7 @@ app = FastAPI(title=settings.app_name)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -51,6 +51,8 @@ def run_migrations() -> None:
             connection.execute(text("ALTER TABLE notes ADD COLUMN icon VARCHAR(500) DEFAULT '📝'"))
         if "deleted_at" not in note_columns:
             connection.execute(text("ALTER TABLE notes ADD COLUMN deleted_at DATETIME"))
+        if "is_title_manually_edited" not in note_columns:
+            connection.execute(text("ALTER TABLE notes ADD COLUMN is_title_manually_edited INTEGER DEFAULT 0"))
         task_columns = {column["name"] for column in inspector.get_columns("tasks")} if "tasks" in inspector.get_table_names() else set()
         if "priority" not in task_columns:
             connection.execute(text("ALTER TABLE tasks ADD COLUMN priority VARCHAR(20) DEFAULT 'medium'"))
@@ -77,7 +79,33 @@ async def health() -> dict[str, str]:
 
 @app.get("/{full_path:path}", response_model=None)
 async def spa(full_path: str):
+    """
+    SPA Fallback Route:
+    1. If requested path matches a file in frontend_dist, serve it.
+    2. Otherwise, if not an api call, return index.html for SPA.
+    3. Else return 404.
+    """
+    # 1. Check if it's a direct file in frontend_dist (like favicon.svg, robots.txt)
+    # Exclude directories and index.html to avoid infinite loops
+    target_file = frontend_dist / full_path
+    
+    # Special handle for common web files if full_path is empty but requested
+    if not full_path:
+        # If accessing root, always try index.html first via fallback below
+        pass
+    elif target_file.is_file() and target_file.name != "index.html":
+        return FileResponse(target_file)
+    elif full_path == "favicon.ico" and (frontend_dist / "favicon.svg").exists():
+        return FileResponse(frontend_dist / "favicon.svg")
+
+    # 2. Skip SPA fallback for API routes, health, and assets to avoid 200 OK for 404
+    if full_path.startswith("api") or full_path == "health" or full_path.startswith("assets"):
+         raise HTTPException(status_code=404, detail="Resource not found")
+    
+    # 3. Handle SPA fallback (only if index.html exists)
     index_file = frontend_dist / "index.html"
-    if index_file.exists() and not full_path.startswith("api") and full_path != "health":
+    if index_file.exists():
         return FileResponse(index_file)
-    return FileResponse(index_file) if index_file.exists() else JSONResponse({"status": "backend-only"})
+    
+    # 4. Fallback if no frontend is built
+    return JSONResponse({"status": "backend-only"}, status_code=200)

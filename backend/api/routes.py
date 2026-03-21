@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.agent.planner import run_agent
@@ -12,15 +13,21 @@ from backend.models.schemas import (
     AskResponse,
     BulkNoteAction,
     Citation,
+    InlineAIRequest,
     ModelConfigPayload,
     NotebookCreate,
     NotebookUpdate,
     NotebookResponse,
     NoteCreate,
     NoteMovePayload,
+    NotePropertyCreate,
+    NotePropertyResponse,
+    NotePropertyUpdate,
     NoteResponse,
     NoteUpdate,
     SearchRequest,
+    TagSuggestRequest,
+    TagSuggestResponse,
     TaskCreate,
     TaskResponse,
     TaskUpdate,
@@ -34,8 +41,11 @@ from backend.services.document_service import chunk_text, parse_document
 from backend.services.repositories import (
     create_note,
     create_notebook,
+    create_note_property,
     create_task,
+    delete_note_property,
     get_note,
+    get_note_properties,
     get_or_create_default_notebook,
     get_or_create_model_config,
     list_notes,
@@ -56,6 +66,7 @@ from backend.services.repositories import (
     update_notebook,
     update_note,
     update_model_config,
+    update_note_property,
     update_task,
 )
 from backend.services.vector_store import vector_store
@@ -68,6 +79,7 @@ ai_client = AIClient()
 
 def note_to_response(note: Note) -> NoteResponse:
     links = [link.target_note_id for link in note.links_from]
+    properties = [NotePropertyResponse.model_validate(p) for p in note.properties]
     return NoteResponse(
         id=note.id,
         title=note.title,
@@ -75,9 +87,12 @@ def note_to_response(note: Note) -> NoteResponse:
         content=note.content,
         summary=note.summary,
         tags=[tag for tag in note.tags.split(",") if tag],
+        properties=properties,
         links=links,
         notebook_id=note.notebook_id,
+        parent_id=note.parent_id,
         position=note.position,
+        is_title_manually_edited=(note.is_title_manually_edited == 1),
         created_at=note.created_at,
         deleted_at=note.deleted_at,
     )
@@ -87,11 +102,11 @@ def notebook_to_response(notebook: Notebook) -> NotebookResponse:
     return NotebookResponse.model_validate(notebook)
 
 
-async def persist_note(db: Session, title: str, content: str, notebook_id: int | None = None, icon: str = "📝") -> NoteResponse:
-    return await index_note(db, None, title, content, notebook_id, icon)
+async def persist_note(db: Session, title: str, content: str, notebook_id: int | None = None, icon: str = "📝", parent_id: int | None = None, is_title_manually_edited: bool = False, tags: list[str] | None = None) -> NoteResponse:
+    return await index_note(db, None, title, content, notebook_id, icon, parent_id, is_title_manually_edited, tags)
 
 
-async def index_note(db: Session, note_id: int | None, title: str, content: str, notebook_id: int | None = None, icon: str = "📝") -> NoteResponse:
+async def index_note(db: Session, note_id: int | None, title: str, content: str, notebook_id: int | None = None, icon: str = "📝", parent_id: int | None = None, is_title_manually_edited: bool = False, tags: list[str] | None = None) -> NoteResponse:
     model_config = get_or_create_model_config(db)
     llm_config = {
         "provider": model_config.provider,
@@ -100,12 +115,15 @@ async def index_note(db: Session, note_id: int | None, title: str, content: str,
         "model_name": model_config.model_name,
     }
     summary = await ai_client.summarize(content, llm_config)
-    tags = await ai_client.tags(content, llm_config)
+    
+    # If tags are NOT provided, we don't auto-create them anymore, EXCEPT for new notes if we want some initial tags?
+    # User said: "笔记的标签不再自动创建" (tags of notes no longer automatically created)
+    
     if note_id is None:
         notebook_id = notebook_id or get_or_create_default_notebook(db).id
-        note = create_note(db, title=title, content=content, summary=summary, tags=tags, notebook_id=notebook_id, icon=icon)
+        note = create_note(db, title=title, content=content, summary=summary, tags=tags, notebook_id=notebook_id, icon=icon, parent_id=parent_id, is_title_manually_edited=is_title_manually_edited)
     else:
-        note = update_note(db, note_id, title, content, summary, tags, icon)
+        note = update_note(db, note_id, title, content, summary, tags, icon, parent_id, is_title_manually_edited)
 
     chunks = chunk_text(content, settings.chunk_size_words, settings.chunk_overlap_words)
     records = []
@@ -123,13 +141,16 @@ async def index_note(db: Session, note_id: int | None, title: str, content: str,
         )
     vector_store.upsert_chunks(records)
 
-    other_notes = [item for item in list_notes(db) if item.id != note.id]
+    # 使用 ChromaDB 寻找相似笔记，而不是遍历数据库，大幅提升保存性能
+    results = vector_store.search(note_embedding, top_k=6)  # 包含自己，取 6 个
     link_targets: list[tuple[int, float]] = []
-    for item in other_notes:
-        other_embedding = await ai_client.embed(f"{item.title}\n{item.summary}\n{item.content[:3000]}", llm_config)
-        score = cosine_similarity(note_embedding, other_embedding)
-        if score >= 0.2:
-            link_targets.append((item.id, score))
+    seen_notes = {note.id}
+    for item in results:
+        target_note_id = item["metadata"]["note_id"]
+        if target_note_id not in seen_notes and item["score"] >= 0.2:
+            link_targets.append((target_note_id, item["score"]))
+            seen_notes.add(target_note_id)
+    
     replace_note_links(db, note.id, sorted(link_targets, key=lambda pair: pair[1], reverse=True)[:5])
 
     db.refresh(note)
@@ -175,9 +196,114 @@ async def search_api(payload: SearchRequest, db: Session = Depends(get_db)) -> d
     return {"results": citations_from_results(db, results)}
 
 
+@router.post("/ai/inline")
+async def inline_ai(payload: InlineAIRequest, db: Session = Depends(get_db)):
+    model_config = get_or_create_model_config(db)
+    llm_config = {
+        "provider": model_config.provider,
+        "api_key": model_config.api_key,
+        "base_url": model_config.base_url,
+        "model_name": model_config.model_name,
+    }
+    
+    system_prompts = {
+        "continue": "You are a writing assistant. Continue writing the following text naturally. Return only the new text.",
+        "expand": "You are a writing assistant. Expand the following text with more details and depth. Return only the expanded version.",
+        "summarize": "You are a writing assistant. Summarize the following text concisely. Return only the summary.",
+        "rewrite": "You are a writing assistant. Rewrite the following text to be more professional and clear. Return only the rewritten text.",
+        "translate": "You are a writing assistant. Translate the following text to Chinese (if it is English) or English (if it is Chinese). Return only the translation.",
+        "outline": "You are a writing assistant. Generate a structured outline for the following topic or text. Return only the outline.",
+    }
+    
+    messages = [
+        {"role": "system", "content": system_prompts.get(payload.action, "You are a helpful writing assistant.")},
+        {"role": "user", "content": f"Context: {payload.context or ''}\n\nInput: {payload.prompt}"}
+    ]
+    
+    async def generate():
+        async for chunk in ai_client.stream_chat(messages, llm_config):
+            yield chunk
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/chat")
+async def global_chat(payload: AskRequest, db: Session = Depends(get_db)):
+    model_config = get_or_create_model_config(db)
+    llm_config = {
+        "provider": model_config.provider,
+        "api_key": model_config.api_key,
+        "base_url": model_config.base_url,
+        "model_name": model_config.model_name,
+    }
+
+    if payload.mode == "rag":
+        results = await search_knowledge(payload.question, ai_client=ai_client, top_k=5)
+        citations = citations_from_results(db, results)
+        citation_block = "\n\n".join(
+            f"[{idx + 1}] {item['title']}\n{item['excerpt']}" for idx, item in enumerate(citations)
+        )
+        messages = [
+            {"role": "system", "content": "You are a personal second-brain assistant. Answer using the provided notes only. Always cite sources as [1], [2] inline."},
+            {"role": "user", "content": f"Question: {payload.question}\n\nContext:\n{citation_block}"}
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": "You are a helpful second-brain assistant."},
+            {"role": "user", "content": payload.question}
+        ]
+
+    async def generate():
+        async for chunk in ai_client.stream_chat(messages, llm_config):
+            yield chunk
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/tags/suggest", response_model=TagSuggestResponse)
+async def suggest_tags(payload: TagSuggestRequest, db: Session = Depends(get_db)):
+    model_config = get_or_create_model_config(db)
+    llm_config = {
+        "provider": model_config.provider,
+        "api_key": model_config.api_key,
+        "base_url": model_config.base_url,
+        "model_name": model_config.model_name,
+    }
+    tags = await ai_client.tags(payload.content, llm_config)
+    return TagSuggestResponse(tags=tags)
+
+
 @router.get("/notes", response_model=list[NoteResponse])
-def get_notes(db: Session = Depends(get_db)) -> list[NoteResponse]:
-    return [note_to_response(note) for note in list_notes(db)]
+def get_notes(property_name: str | None = None, property_value: str | None = None, db: Session = Depends(get_db)) -> list[NoteResponse]:
+    filter_dict = None
+    if property_name and property_value:
+        filter_dict = {property_name: property_value}
+    return [note_to_response(note) for note in list_notes(db, filter_dict)]
+
+
+@router.get("/notes/{note_id}/properties", response_model=list[NotePropertyResponse])
+def get_note_properties_api(note_id: int, db: Session = Depends(get_db)) -> list[NotePropertyResponse]:
+    return [NotePropertyResponse.model_validate(p) for p in get_note_properties(db, note_id)]
+
+
+@router.post("/notes/{note_id}/properties", response_model=NotePropertyResponse)
+def create_note_property_api(note_id: int, payload: NotePropertyCreate, db: Session = Depends(get_db)) -> NotePropertyResponse:
+    return NotePropertyResponse.model_validate(create_note_property(db, note_id, payload.name, payload.type, payload.value))
+
+
+@router.patch("/notes/{note_id}/properties/{property_id}", response_model=NotePropertyResponse)
+def update_note_property_api(note_id: int, property_id: int, payload: NotePropertyUpdate, db: Session = Depends(get_db)) -> NotePropertyResponse:
+    prop = update_note_property(db, property_id, payload.name, payload.type, payload.value)
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found")
+    return NotePropertyResponse.model_validate(prop)
+
+
+@router.delete("/notes/{note_id}/properties/{property_id}")
+def delete_note_property_api(note_id: int, property_id: int, db: Session = Depends(get_db)) -> dict:
+    if not delete_note_property(db, property_id):
+        raise HTTPException(status_code=404, detail="Property not found")
+    return {"status": "ok"}
 
 
 @router.get("/trash", response_model=TrashResponse)
@@ -232,7 +358,7 @@ def purge_notebook_api(notebook_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/notes", response_model=NoteResponse)
 async def create_note_api(payload: NoteCreate, db: Session = Depends(get_db)) -> NoteResponse:
-    return await persist_note(db, payload.title, payload.content, payload.notebook_id, payload.icon)
+    return await persist_note(db, payload.title, payload.content, payload.notebook_id, payload.icon, payload.parent_id, payload.is_title_manually_edited, payload.tags)
 
 
 @router.put("/notes/{note_id}", response_model=NoteResponse)
@@ -243,13 +369,24 @@ async def update_note_api(note_id: int, payload: NoteUpdate, db: Session = Depen
     title = payload.title or existing.title
     content = payload.content or existing.content
     icon = payload.icon or existing.icon
-    return await index_note(db, note_id, title, content, existing.notebook_id, icon)
+    parent_id = payload.parent_id if payload.parent_id is not None else existing.parent_id
+    is_title_manually_edited = payload.is_title_manually_edited if payload.is_title_manually_edited is not None else (existing.is_title_manually_edited == 1)
+    tags = payload.tags
+    return await index_note(db, note_id, title, content, existing.notebook_id, icon, parent_id, is_title_manually_edited, tags)
+
+
+@router.patch("/notes/{note_id}/tags", response_model=NoteResponse)
+def update_note_tags_api(note_id: int, tags: list[str], db: Session = Depends(get_db)) -> NoteResponse:
+    note = update_note(db, note_id, tags=tags)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note_to_response(note)
 
 
 @router.patch("/notes/{note_id}/move", response_model=NoteResponse)
 def move_note_api(note_id: int, payload: NoteMovePayload, db: Session = Depends(get_db)) -> NoteResponse:
     target_notebook_id = payload.notebook_id or get_or_create_default_notebook(db).id
-    note = move_note(db, note_id, target_notebook_id, payload.position)
+    note = move_note(db, note_id, target_notebook_id, payload.position, payload.parent_id)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     return note_to_response(note)
@@ -258,7 +395,7 @@ def move_note_api(note_id: int, payload: NoteMovePayload, db: Session = Depends(
 @router.post("/notes/bulk-move")
 def bulk_move_notes_api(payload: BulkNoteAction, db: Session = Depends(get_db)) -> dict:
     notebook_id = payload.notebook_id or get_or_create_default_notebook(db).id
-    notes = bulk_move_notes(db, payload.note_ids, notebook_id, payload.position)
+    notes = bulk_move_notes(db, payload.note_ids, notebook_id, payload.position, payload.parent_id)
     return {"notes": [note_to_response(note).model_dump() for note in notes]}
 
 

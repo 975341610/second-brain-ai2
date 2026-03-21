@@ -1,11 +1,13 @@
 import { CheckCircle2, Bot, FileText, Info, MessageSquareText, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AssistantPanel } from '../components/AssistantPanel';
+import { DatabaseView } from '../components/DatabaseView';
 import { EditorPanel } from '../components/EditorPanel';
 import { HomeDashboard } from '../components/HomeDashboard';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { Sidebar } from '../components/Sidebar';
 import { useAppStore } from '../store/useAppStore';
+import { api } from '../lib/api';
 import type { OutlineItem } from '../lib/types';
 
 function extractOutline(content: string): OutlineItem[] {
@@ -24,7 +26,7 @@ function extractReferences(content: string): string[] {
 
 export default function App() {
   const [mobileTab, setMobileTab] = useState<'notes' | 'editor'>('editor');
-  const [activePage, setActivePage] = useState<'home' | 'notes' | 'settings'>('home');
+  const [activePage, setActivePage] = useState<'home' | 'notes' | 'settings' | 'database'>('home');
   const [showAssistantCard, setShowAssistantCard] = useState(false);
   const {
     notes,
@@ -59,9 +61,11 @@ export default function App() {
     restoreNote,
     purgeNote,
     selectNote,
+    updateNoteTags,
     createTask,
     updateTaskStatus,
     askAssistant,
+    askStreamingAssistant,
     uploadFiles,
     updateModelConfig,
     startNewChat,
@@ -102,8 +106,17 @@ export default function App() {
           {isUploading && <span className="rounded-full bg-amber-600 px-3 py-2 text-white">文件导入中</span>}
           {loading && <span className="rounded-full bg-emerald-700 px-3 py-2 text-white">AI 正在处理中</span>}
         </div>
-        {toast && <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-soft ${toastClasses}`}>{toastIcon}<span>{toast.text}</span><button onClick={clearToast} className="ml-1 opacity-70"><X size={14} /></button></div>}
       </div>
+
+      {toast && (
+        <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 rounded-2xl border px-6 py-4 text-sm shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 ${toastClasses}`}>
+          {toastIcon}
+          <span className="font-medium">{toast.text}</span>
+          <button onClick={clearToast} className="ml-2 p-1 hover:bg-black/5 rounded-full transition-colors opacity-70">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       <div className="mx-auto mb-4 grid max-w-[1680px] grid-cols-4 gap-2 xl:hidden">
         {mobileTabs.map((tab) => {
@@ -132,15 +145,22 @@ export default function App() {
             onUpdateNote={(noteId, payload) => {
               const note = notes.find((item) => item.id === noteId);
               if (!note) return;
-              void saveNote({ id: note.id, title: payload.title ?? note.title, content: note.content, icon: payload.icon ?? note.icon });
+              void saveNote({ 
+                id: note.id, 
+                title: payload.title ?? note.title, 
+                content: note.content, 
+                icon: payload.icon ?? note.icon,
+                tags: payload.tags,
+                is_title_manually_edited: payload.title !== undefined ? true : note.is_title_manually_edited
+              });
             }}
             onUpdateNotebook={(notebookId, payload) => void updateNotebook(notebookId, payload)}
             onDeleteNotebook={(notebookId) => void deleteNotebook(notebookId)}
             onRestoreNotebook={(notebookId) => void restoreNotebook(notebookId)}
             onPurgeNotebook={(notebookId) => void purgeNotebook(notebookId)}
-            onCreateNoteInNotebook={(notebookId) => createDraftNote(notebookId)}
-            onMoveNote={(noteId, notebookId, position) => void moveNote(noteId, notebookId, position)}
-            onBulkMoveNotes={(notebookId) => void bulkMoveNotes(notebookId)}
+            onCreateNoteInNotebook={(notebookId, parentId) => createDraftNote(notebookId, parentId)}
+            onMoveNote={(noteId, notebookId, position, parentId) => void moveNote(noteId, notebookId, position, parentId)}
+            onBulkMoveNotes={(notebookId, parentId) => void bulkMoveNotes(notebookId, parentId)}
             onBulkDeleteNotes={() => void bulkDeleteNotes()}
             onDeleteNote={(noteId) => void deleteNote(noteId)}
             onRestoreNote={(noteId) => void restoreNote(noteId)}
@@ -150,11 +170,35 @@ export default function App() {
         </div>
 
         <div className="min-h-0 grid gap-4">
-          {activePage === 'home' && <HomeDashboard recentNotes={recentNotes} tasks={tasks} assistant={assistant} modelConfig={modelConfig} sessions={chatSessions} activeSessionId={activeChatSessionId} onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} onAsk={askAssistant} onCreateTask={createTask} onUpdateTaskStatus={updateTaskStatus} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} />}
+          {activePage === 'home' && <HomeDashboard recentNotes={recentNotes} tasks={tasks} assistant={assistant} modelConfig={modelConfig} sessions={chatSessions} activeSessionId={activeChatSessionId} onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} onAsk={askStreamingAssistant} onCreateTask={createTask} onUpdateTaskStatus={updateTaskStatus} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} />}
+          {activePage === 'database' && (
+            <DatabaseView 
+              notes={notes} 
+              onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }}
+              onCreateNote={() => createDraftNote()}
+              onUpdateNoteProperty={async (noteId, propertyId, value) => {
+                await api.updateNoteProperty(noteId, propertyId, { value });
+                // 重新加载数据以刷新视图
+                void loadInitialData();
+              }}
+            />
+          )}
           {activePage === 'settings' && <SettingsPanel modelConfig={modelConfig} onUpdateModelConfig={updateModelConfig} />}
           {activePage === 'notes' && (
             <div className={mobileTab === 'editor' ? 'block' : 'hidden xl:block'}>
-                <EditorPanel note={selectedNote} isSaving={isSavingNote} onSave={saveNote} outline={outline} references={references} relatedNotes={relatedNotes} />
+                <EditorPanel 
+                  note={selectedNote} 
+                  notes={notes}
+                  isSaving={isSavingNote} 
+                  onSave={saveNote} 
+                  onUpdateTags={updateNoteTags}
+                  onCreateSubPage={(parentId) => createDraftNote(selectedNote?.notebook_id, parentId)}
+                  onSelectNote={(noteId) => selectNote(noteId)}
+                  onNotify={notify}
+                  outline={outline} 
+                  references={references} 
+                  relatedNotes={relatedNotes} 
+                />
             </div>
           )}
         </div>
@@ -167,7 +211,7 @@ export default function App() {
           </button>
           {showAssistantCard && (
             <div className="fixed bottom-24 right-6 z-30 w-[340px] max-w-[calc(100vw-2rem)]">
-              <AssistantPanel assistant={assistant} modelConfig={modelConfig} loading={loading} onAsk={askAssistant} sessions={chatSessions} activeSessionId={activeChatSessionId} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} onUpdateModelConfig={async () => {}} />
+              <AssistantPanel assistant={assistant} modelConfig={modelConfig} loading={loading} onAsk={askStreamingAssistant} sessions={chatSessions} activeSessionId={activeChatSessionId} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} onUpdateModelConfig={async () => {}} />
             </div>
           )}
         </>

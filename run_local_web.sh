@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/cai/second-brain-ai"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_LOG="/tmp/second-brain-backend.log"
 
 cd "$ROOT/frontend"
@@ -11,9 +11,9 @@ rm -rf "$ROOT/frontend_dist"
 cp -r "$ROOT/frontend/dist" "$ROOT/frontend_dist"
 
 pkill -f "uvicorn backend.main:app" || true
-python3 - <<'PY'
+python3 - <<PY
 import os, subprocess
-root='/home/cai/second-brain-ai'
+root='$ROOT'
 env=os.environ.copy()
 env['PYTHONPATH']=root
 with open('/tmp/second-brain-backend.log','wb') as f:

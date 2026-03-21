@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     chunk_size_words: int = 650
     chunk_overlap_words: int = 80
     top_k: int = 5
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: list[str] = ["*"]
     sample_docs_path: str = Field(default=(runtime_root() / "data" / "sample_docs").as_posix())
 
     model_config = SettingsConfigDict(env_file=str(PROJECT_DIR / ".env"), extra="ignore")

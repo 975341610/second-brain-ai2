@@ -1,10 +1,90 @@
-import { Node } from '@tiptap/core';
+import { Node, Mark, Extension, mergeAttributes, markInputRule } from '@tiptap/core';
+import Suggestion from '@tiptap/suggestion';
 import Image from '@tiptap/extension-image';
 import { TableCell as BaseTableCell } from '@tiptap/extension-table-cell';
 import { TableHeader as BaseTableHeader } from '@tiptap/extension-table-header';
+import TaskItem from '@tiptap/extension-task-item';
+import TaskList from '@tiptap/extension-task-list';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import React from 'react';
 import { MediaNodeView } from '../components/MediaNodeView';
+
+export { TaskList, TaskItem };
+
+export const SlashCommands = Extension.create({
+  name: 'slashCommands',
+
+  addOptions() {
+    return {
+      suggestion: {
+        char: '/',
+        command: ({ editor, range, props }: any) => {
+          // 1. First, delete the slash and its trigger text
+          // Using a single transaction is key here.
+          // We must ensure the selection is updated AFTER deletion.
+          const { tr } = editor.state;
+          tr.deleteRange(range.from, range.to);
+          editor.view.dispatch(tr);
+
+          // 2. Now run the command with focus
+          editor.chain().focus();
+          
+          // props.action expects a chain, so we provide one
+          const chain = editor.chain().focus();
+          const result = props.action(chain);
+          
+          if (result && typeof result.run === 'function') {
+            result.run();
+          } else if (chain && typeof chain.run === 'function') {
+            chain.run();
+          }
+        },
+      },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      Suggestion({
+        editor: this.editor,
+        ...this.options.suggestion,
+      }),
+    ];
+  },
+});
+
+export const WikiLink = Mark.create({
+  name: 'wikiLink',
+  priority: 1000,
+  keepOnSplit: false,
+  addAttributes() {
+    return {
+      title: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-wiki-title'),
+        renderHTML: (attributes) => {
+          if (!attributes.title) return {};
+          return { 'data-wiki-title': attributes.title, class: 'wiki-link', 'data-type': 'wiki' };
+        },
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-wiki-title]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
+  },
+  addInputRules() {
+    return [
+      markInputRule({
+        find: /\[\[([^\]]+)\]\]$/,
+        type: this.type,
+        getAttributes: (match) => ({ title: match[1] }),
+      }),
+    ];
+  },
+});
 
 const propertyTypeAttr = {
   propertyType: {
@@ -141,11 +221,12 @@ export const EmbedNode = Node.create({
 export const CalloutNode = Node.create({
   name: 'callout',
   group: 'block',
-  content: 'inline*',
+  content: 'block+',
+  defining: true,
   parseHTML() {
     return [{ tag: 'div[data-callout]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-callout': 'true', class: 'callout-block' }, 0];
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-callout': 'true', class: 'callout-block' }), 0];
   },
 });

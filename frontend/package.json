@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tiptap/extension-bubble-menu": "^3.20.4",
     "@tiptap/extension-drag-handle-react": "^3.20.4",
+    "@tiptap/extension-floating-menu": "^3.20.4",
     "@tiptap/extension-highlight": "^3.20.4",
     "@tiptap/extension-image": "^3.20.4",
     "@tiptap/extension-link": "^3.20.4",
@@ -17,15 +19,20 @@
     "@tiptap/extension-table-cell": "^3.20.4",
     "@tiptap/extension-table-header": "^3.20.4",
     "@tiptap/extension-table-row": "^3.20.4",
+    "@tiptap/extension-task-item": "^3.20.4",
+    "@tiptap/extension-task-list": "^3.20.4",
+    "@tiptap/extension-underline": "^3.20.4",
     "@tiptap/extension-youtube": "^3.20.4",
     "@tiptap/react": "^3.20.4",
     "@tiptap/starter-kit": "^3.20.4",
+    "@tiptap/suggestion": "^3.20.4",
     "lucide-react": "^0.511.0",
     "marked": "^17.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.1",
+    "tippy.js": "^6.3.7",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

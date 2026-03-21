@@ -71,19 +71,20 @@ type AppState = {
   isUploading: boolean;
   toast: ToastMessage | null;
   modelConfig: ModelConfig;
-  loadInitialData: () => Promise<void>;
-  selectNote: (noteId: number) => void;
-  createDraftNote: (notebookId?: number | null) => void;
-  saveNote: (payload: { id?: number; title: string; content: string; notebookId?: number | null; icon?: string; silent?: boolean }) => Promise<void>;
-  createNotebook: (name: string) => Promise<void>;
-  updateNotebook: (notebookId: number, payload: { name?: string; icon?: string }) => Promise<void>;
-  deleteNotebook: (notebookId: number) => Promise<void>;
-  restoreNotebook: (notebookId: number) => Promise<void>;
-  purgeNotebook: (notebookId: number) => Promise<void>;
-  moveNote: (noteId: number, notebookId: number, position: number) => Promise<void>;
-  toggleNoteSelection: (noteId: number) => void;
-  clearNoteSelection: () => void;
-  bulkMoveNotes: (notebookId: number) => Promise<void>;
+    loadInitialData: () => Promise<void>;
+    selectNote: (noteId: number) => void;
+    createDraftNote: (notebookId?: number | null, parentId?: number | null) => void;
+    saveNote: (payload: { id?: number; title?: string; content?: string; notebookId?: number | null; parent_id?: number | null; icon?: string; is_title_manually_edited?: boolean; tags?: string[]; silent?: boolean }) => Promise<void>;
+    updateNoteTags: (noteId: number, tags: string[]) => Promise<void>;
+    createNotebook: (name: string) => Promise<void>;
+    updateNotebook: (notebookId: number, payload: { name?: string; icon?: string }) => Promise<void>;
+    deleteNotebook: (notebookId: number) => Promise<void>;
+    restoreNotebook: (notebookId: number) => Promise<void>;
+    purgeNotebook: (notebookId: number) => Promise<void>;
+    moveNote: (noteId: number, notebookId: number, position: number, parentId?: number | null) => Promise<void>;
+    toggleNoteSelection: (noteId: number) => void;
+    clearNoteSelection: () => void;
+    bulkMoveNotes: (notebookId: number, parentId?: number | null) => Promise<void>;
   bulkDeleteNotes: () => Promise<void>;
   deleteNote: (noteId: number) => Promise<void>;
   restoreNote: (noteId: number) => Promise<void>;
@@ -91,6 +92,7 @@ type AppState = {
   createTask: (payload: { title: string; priority: Task['priority']; task_type: Task['task_type']; deadline: string | null }) => Promise<void>;
   updateTaskStatus: (taskId: number, status: Task['status']) => Promise<void>;
   askAssistant: (question: string, mode: 'chat' | 'rag' | 'agent') => Promise<void>;
+  askStreamingAssistant: (question: string, mode: 'chat' | 'rag' | 'agent') => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
   updateModelConfig: (payload: ModelConfig) => Promise<void>;
   startNewChat: () => void;
@@ -145,7 +147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   selectNote: (selectedNoteId) => set((state) => ({ selectedNoteId, recentNoteIds: [selectedNoteId, ...state.recentNoteIds.filter((id) => id !== selectedNoteId)].slice(0, 8) })),
-  createDraftNote: (notebookId) => {
+  createDraftNote: (notebookId, parentId) => {
     const targetNotebookId = notebookId ?? get().notebooks[0]?.id ?? null;
     const draftId = -Date.now();
     const draft: Note = {
@@ -154,22 +156,40 @@ export const useAppStore = create<AppState>((set, get) => ({
       icon: '📝',
       content: '<h1>新建笔记</h1><p>从这里开始记录你的想法。</p>',
       summary: '新建草稿',
+      is_title_manually_edited: false,
       tags: [],
+      properties: [],
       links: [],
       notebook_id: targetNotebookId,
+      parent_id: parentId ?? null,
       position: 0,
       created_at: new Date().toISOString(),
       is_draft: true,
     };
     set({ notes: [draft, ...get().notes], selectedNoteId: draftId });
   },
-  saveNote: async ({ id, title, content, notebookId, icon, silent }) => {
+  saveNote: async ({ id, title, content, notebookId, parent_id, icon, is_title_manually_edited, tags, silent }) => {
     set({ isSavingNote: true });
     try {
       const isDraft = typeof id === 'number' && id < 0;
       const note = !id || isDraft
-        ? await api.createNote({ title, content, notebook_id: notebookId ?? get().notes.find((item) => item.id === id)?.notebook_id ?? get().notebooks[0]?.id ?? null, icon })
-        : await api.updateNote(id, { title, content, icon });
+        ? await api.createNote({
+            title: title ?? '未命名笔记',
+            content: content ?? '',
+            notebook_id: notebookId ?? get().notes.find((item) => item.id === id)?.notebook_id ?? get().notebooks[0]?.id ?? null,
+            parent_id: parent_id ?? get().notes.find((item) => item.id === id)?.parent_id ?? null,
+            icon: icon ?? '📝',
+            is_title_manually_edited: is_title_manually_edited ?? false,
+            tags,
+          })
+        : await api.updateNote(id, { 
+            title, 
+            content, 
+            icon, 
+            parent_id: parent_id ?? undefined,
+            is_title_manually_edited,
+            tags
+          });
       const currentNotes = get().notes;
       const withoutOriginal = typeof id === 'number' ? currentNotes.filter((item) => item.id !== id) : currentNotes;
       const hasTarget = withoutOriginal.some((item) => item.id === note.id);
@@ -181,6 +201,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ toast: { id: Date.now(), tone: 'error', text: `保存失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     } finally {
       set({ isSavingNote: false });
+    }
+  },
+  updateNoteTags: async (noteId, tags) => {
+    try {
+      const note = await api.updateNoteTags(noteId, tags);
+      set((state) => ({
+        notes: state.notes.map((item) => (item.id === note.id ? note : item)),
+      }));
+    } catch (error) {
+      set({ toast: { id: Date.now(), tone: 'error', text: `更新标签失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
   createNotebook: async (name) => {
@@ -226,9 +256,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ toast: { id: Date.now(), tone: 'error', text: `永久删除笔记本失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
-  moveNote: async (noteId, notebookId, position) => {
+  moveNote: async (noteId, notebookId, position, parentId) => {
     try {
-      const note = await api.moveNote(noteId, { notebook_id: notebookId, position });
+      const note = await api.moveNote(noteId, { notebook_id: notebookId, position, parent_id: parentId });
       const notes = get().notes.filter((item) => item.id !== noteId);
       notes.push(note);
       notes.sort((a, b) => (a.notebook_id ?? 0) - (b.notebook_id ?? 0) || a.position - b.position);
@@ -242,11 +272,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedNoteIds: selected.includes(noteId) ? selected.filter((id) => id !== noteId) : [...selected, noteId] });
   },
   clearNoteSelection: () => set({ selectedNoteIds: [] }),
-  bulkMoveNotes: async (notebookId) => {
+  bulkMoveNotes: async (notebookId, parentId) => {
     const noteIds = get().selectedNoteIds;
     if (noteIds.length === 0) return;
     try {
-      await api.bulkMoveNotes({ note_ids: noteIds, notebook_id: notebookId, position: 0 });
+      await api.bulkMoveNotes({ note_ids: noteIds, notebook_id: notebookId, position: 0, parent_id: parentId });
       const notes = await api.listNotes();
       set({ notes, selectedNoteIds: [], toast: { id: Date.now(), tone: 'success', text: '已批量移动笔记。' } });
     } catch (error) {
@@ -326,6 +356,57 @@ export const useAppStore = create<AppState>((set, get) => ({
       const updatedSessions = get().chatSessions.map((session) => session.id === activeId ? { ...session, messages: [...session.messages, assistantMessage], updated_at: new Date().toISOString() } : session);
       writeStoredChats(updatedSessions, activeId);
       set({ assistant, tasks, chatSessions: updatedSessions, toast: { id: Date.now(), tone: 'success', text: mode === 'agent' ? '智能体规划已生成。' : 'AI 回答已返回。' } });
+    } catch (error) {
+      set({ toast: { id: Date.now(), tone: 'error', text: `提问失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
+    } finally {
+      set({ loading: false });
+    }
+  },
+  askStreamingAssistant: async (question, mode) => {
+    set({ loading: true });
+    try {
+      const activeId = get().activeChatSessionId;
+      const userMessage: ChatMessage = { id: Date.now(), role: 'user', content: question, mode, created_at: new Date().toISOString() };
+      
+      const assistantMessageId = Date.now() + 1;
+      const assistantPlaceholder: ChatMessage = { id: assistantMessageId, role: 'assistant', content: '', mode, created_at: new Date().toISOString() };
+      
+      const sessionsWithUser = get().chatSessions.map((session) => 
+        session.id === activeId 
+          ? { 
+              ...session, 
+              messages: [...session.messages, userMessage, assistantPlaceholder], 
+              updated_at: new Date().toISOString(), 
+              title: session.messages.length === 0 ? question.slice(0, 16) || '新会话' : session.title 
+            } 
+          : session
+      );
+      
+      set({ chatSessions: sessionsWithUser });
+
+      let fullContent = '';
+      await api.streamChat({ question, mode }, (chunk) => {
+        fullContent += chunk;
+        set((state) => ({
+          chatSessions: state.chatSessions.map((s) => 
+            s.id === activeId 
+              ? {
+                  ...s,
+                  messages: s.messages.map((m) => m.id === assistantMessageId ? { ...m, content: fullContent } : m)
+                }
+              : s
+          )
+        }));
+      });
+
+      const finalSessions = get().chatSessions;
+      writeStoredChats(finalSessions, activeId);
+      set({ assistant: latestAssistantFromSession(finalSessions.find(s => s.id === activeId)) });
+      
+      if (mode === 'agent') {
+        const tasks = await api.listTasks();
+        set({ tasks });
+      }
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `提问失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     } finally {

@@ -1,6 +1,6 @@
-import type { AskResponse, ModelConfig, Note, Notebook, Task, TrashState } from './types';
+import type { AskResponse, ModelConfig, Note, Notebook, NoteProperty, Task, TrashState } from './types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000/api' : `${window.location.origin}/api`);
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -26,17 +26,27 @@ export const api = {
   deleteNotebook: (notebookId: number) => request(`/notebooks/${notebookId}`, { method: 'DELETE' }),
   restoreNotebook: (notebookId: number) => request<Notebook>(`/notebooks/${notebookId}/restore`, { method: 'POST' }),
   purgeNotebook: (notebookId: number) => request(`/notebooks/${notebookId}/purge`, { method: 'DELETE' }),
-  createNote: (payload: { title: string; content: string; notebook_id?: number | null; icon?: string }) =>
+  createNote: (payload: { title: string; content: string; notebook_id?: number | null; icon?: string; parent_id?: number | null; is_title_manually_edited?: boolean; tags?: string[] }) =>
     request<Note>('/notes', { method: 'POST', body: JSON.stringify(payload) }),
-  updateNote: (noteId: number, payload: { title?: string; content?: string; icon?: string }) =>
+  updateNote: (noteId: number, payload: { title?: string; content?: string; icon?: string; parent_id?: number | null; is_title_manually_edited?: boolean; tags?: string[] }) =>
     request<Note>(`/notes/${noteId}`, { method: 'PUT', body: JSON.stringify(payload) }),
-  moveNote: (noteId: number, payload: { notebook_id?: number | null; position: number }) =>
+  updateNoteTags: (noteId: number, tags: string[]) =>
+    request<Note>(`/notes/${noteId}/tags`, { method: 'PATCH', body: JSON.stringify(tags) }),
+  moveNote: (noteId: number, payload: { notebook_id?: number | null; position: number; parent_id?: number | null }) =>
     request<Note>(`/notes/${noteId}/move`, { method: 'PATCH', body: JSON.stringify(payload) }),
-  bulkMoveNotes: (payload: { note_ids: number[]; notebook_id?: number | null; position: number }) =>
+  bulkMoveNotes: (payload: { note_ids: number[]; notebook_id?: number | null; position: number; parent_id?: number | null }) =>
     request<{ notes: Note[] }>('/notes/bulk-move', { method: 'POST', body: JSON.stringify(payload) }),
   bulkDeleteNotes: (payload: { note_ids: number[]; position?: number }) =>
     request<{ notes: Note[] }>('/notes/bulk-delete', { method: 'POST', body: JSON.stringify(payload) }),
   deleteNote: (noteId: number) => request(`/notes/${noteId}`, { method: 'DELETE' }),
+  listNotesFiltered: (propertyName: string, propertyValue: string) => 
+    request<Note[]>(`/notes?property_name=${encodeURIComponent(propertyName)}&property_value=${encodeURIComponent(propertyValue)}`),
+  createNoteProperty: (noteId: number, payload: { name: string; type: string; value: string }) =>
+    request<NoteProperty>(`/notes/${noteId}/properties`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateNoteProperty: (noteId: number, propertyId: number, payload: { name?: string; type?: string; value?: string }) =>
+    request<NoteProperty>(`/notes/${noteId}/properties/${propertyId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteNoteProperty: (noteId: number, propertyId: number) =>
+    request(`/notes/${noteId}/properties/${propertyId}`, { method: 'DELETE' }),
   restoreNote: (noteId: number) => request<Note>(`/notes/${noteId}/restore`, { method: 'POST' }),
   purgeNote: (noteId: number) => request(`/notes/${noteId}/purge`, { method: 'DELETE' }),
   getTrash: () => request<TrashState>('/trash'),
@@ -51,6 +61,39 @@ export const api = {
   getModelConfig: () => request<ModelConfig>('/model-config'),
   updateModelConfig: (payload: ModelConfig) =>
     request<ModelConfig>('/model-config', { method: 'POST', body: JSON.stringify(payload) }),
+  suggestTags: (content: string) => request<{ tags: string[] }>('/tags/suggest', { method: 'POST', body: JSON.stringify({ content }) }),
+  streamInlineAI: async (payload: { prompt: string; context?: string; action: string }, onChunk: (chunk: string) => void) => {
+    const response = await fetch(`${API_BASE}/ai/inline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const reader = response.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      onChunk(decoder.decode(value, { stream: true }));
+    }
+  },
+  streamChat: async (payload: { question: string; mode: string }, onChunk: (chunk: string) => void) => {
+    const response = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const reader = response.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      onChunk(decoder.decode(value, { stream: true }));
+    }
+  },
   upload: async (files: File[]) => {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));

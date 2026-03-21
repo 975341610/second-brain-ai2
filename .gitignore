@@ -11,3 +11,5 @@ frontend/*.d.ts
 frontend/*.js
 frontend/.env
 .env
+
+frontend_dist/

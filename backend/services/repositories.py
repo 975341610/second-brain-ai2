@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from backend.models.db_models import ModelConfig, Note, Notebook, NoteLink, Task
+from backend.models.db_models import ModelConfig, Note, Notebook, NoteLink, NoteProperty, Task, deobfuscate, obfuscate
 
 
 DEFAULT_NOTEBOOK_NAME = "快速笔记"
@@ -57,14 +57,20 @@ def update_notebook(db: Session, notebook_id: int, name: str | None = None, icon
     return notebook
 
 
-def next_note_position(db: Session, notebook_id: int | None) -> int:
-    statement = select(func.max(Note.position)).where(Note.notebook_id == notebook_id, Note.deleted_at.is_(None))
+def next_note_position(db: Session, notebook_id: int | None, parent_id: int | None = None) -> int:
+    statement = select(func.max(Note.position)).where(Note.notebook_id == notebook_id, Note.parent_id == parent_id, Note.deleted_at.is_(None))
     max_position = db.scalar(statement)
     return (max_position or 0) + 1
 
 
-def list_notes(db: Session) -> list[Note]:
-    return list(db.scalars(select(Note).where(Note.deleted_at.is_(None)).order_by(Note.notebook_id.asc(), Note.position.asc(), Note.updated_at.desc())))
+def list_notes(db: Session, property_filter: dict[str, str] | None = None) -> list[Note]:
+    query = select(Note).where(Note.deleted_at.is_(None))
+    
+    if property_filter:
+        for name, value in property_filter.items():
+            query = query.join(NoteProperty).where(NoteProperty.name == name, NoteProperty.value == value)
+            
+    return list(db.scalars(query.order_by(Note.notebook_id.asc(), Note.position.asc(), Note.updated_at.desc())))
 
 
 def list_trashed_notes(db: Session) -> list[Note]:
@@ -75,15 +81,17 @@ def get_note(db: Session, note_id: int) -> Note | None:
     return db.get(Note, note_id)
 
 
-def create_note(db: Session, title: str, content: str, summary: str, tags: list[str], notebook_id: int | None, icon: str = "📝") -> Note:
+def create_note(db: Session, title: str, content: str, summary: str, tags: list[str] | None, notebook_id: int | None, icon: str = "📝", parent_id: int | None = None, is_title_manually_edited: bool = False) -> Note:
     note = Note(
         title=title,
         icon=icon,
         content=content,
         summary=summary,
-        tags=",".join(tags),
+        tags=",".join(tags) if tags else "",
         notebook_id=notebook_id,
-        position=next_note_position(db, notebook_id),
+        parent_id=parent_id,
+        is_title_manually_edited=1 if is_title_manually_edited else 0,
+        position=next_note_position(db, notebook_id, parent_id),
     )
     db.add(note)
     db.commit()
@@ -91,31 +99,40 @@ def create_note(db: Session, title: str, content: str, summary: str, tags: list[
     return note
 
 
-def update_note(db: Session, note_id: int, title: str, content: str, summary: str, tags: list[str], icon: str | None = None) -> Note | None:
+def update_note(db: Session, note_id: int, title: str | None = None, content: str | None = None, summary: str | None = None, tags: list[str] | None = None, icon: str | None = None, parent_id: int | None = None, is_title_manually_edited: bool | None = None) -> Note | None:
     note = db.get(Note, note_id)
     if not note:
         return None
-    note.title = title
-    note.content = content
-    note.summary = summary
-    note.tags = ",".join(tags)
+    if title is not None:
+        note.title = title
+    if content is not None:
+        note.content = content
+    if summary is not None:
+        note.summary = summary
+    if tags is not None:
+        note.tags = ",".join(tags)
     if icon is not None:
         note.icon = icon
+    if parent_id is not None or "parent_id" in db.dirty: # Handle setting to None
+        note.parent_id = parent_id
+    if is_title_manually_edited is not None:
+        note.is_title_manually_edited = 1 if is_title_manually_edited else 0
     db.add(note)
     db.commit()
     db.refresh(note)
     return note
 
 
-def move_note(db: Session, note_id: int, notebook_id: int | None, position: int) -> Note | None:
+def move_note(db: Session, note_id: int, notebook_id: int | None, position: int, parent_id: int | None = None) -> Note | None:
     note = db.get(Note, note_id)
     if not note:
         return None
-    target_notes = list(db.scalars(select(Note).where(Note.notebook_id == notebook_id, Note.id != note_id, Note.deleted_at.is_(None)).order_by(Note.position.asc())))
+    target_notes = list(db.scalars(select(Note).where(Note.notebook_id == notebook_id, Note.parent_id == parent_id, Note.id != note_id, Note.deleted_at.is_(None)).order_by(Note.position.asc())))
     target_index = max(0, min(position, len(target_notes)))
     target_notes.insert(target_index, note)
     for index, item in enumerate(target_notes):
         item.notebook_id = notebook_id
+        item.parent_id = parent_id
         item.position = index + 1
         db.add(item)
     db.commit()
@@ -123,11 +140,11 @@ def move_note(db: Session, note_id: int, notebook_id: int | None, position: int)
     return note
 
 
-def bulk_move_notes(db: Session, note_ids: list[int], notebook_id: int | None, position: int) -> list[Note]:
+def bulk_move_notes(db: Session, note_ids: list[int], notebook_id: int | None, position: int, parent_id: int | None = None) -> list[Note]:
     moved: list[Note] = []
     current_position = position
     for note_id in note_ids:
-        note = move_note(db, note_id, notebook_id, current_position)
+        note = move_note(db, note_id, notebook_id, current_position, parent_id)
         if note:
             moved.append(note)
             current_position += 1
@@ -300,6 +317,43 @@ def update_task(
     return task
 
 
+def create_note_property(db: Session, note_id: int, name: str, type: str, value: str) -> NoteProperty:
+    prop = NoteProperty(note_id=note_id, name=name, type=type, value=value)
+    db.add(prop)
+    db.commit()
+    db.refresh(prop)
+    return prop
+
+
+def update_note_property(db: Session, property_id: int, name: str | None = None, type: str | None = None, value: str | None = None) -> NoteProperty | None:
+    prop = db.get(NoteProperty, property_id)
+    if not prop:
+        return None
+    if name is not None:
+        prop.name = name
+    if type is not None:
+        prop.type = type
+    if value is not None:
+        prop.value = value
+    db.add(prop)
+    db.commit()
+    db.refresh(prop)
+    return prop
+
+
+def delete_note_property(db: Session, property_id: int) -> bool:
+    prop = db.get(NoteProperty, property_id)
+    if not prop:
+        return False
+    db.delete(prop)
+    db.commit()
+    return True
+
+
+def get_note_properties(db: Session, note_id: int) -> list[NoteProperty]:
+    return list(db.scalars(select(NoteProperty).where(NoteProperty.note_id == note_id)))
+
+
 def get_or_create_model_config(db: Session) -> ModelConfig:
     config = db.get(ModelConfig, 1)
     if not config:
@@ -307,16 +361,24 @@ def get_or_create_model_config(db: Session) -> ModelConfig:
         db.add(config)
         db.commit()
         db.refresh(config)
-    return config
+    # 返回前解密
+    return ModelConfig(
+        id=config.id,
+        provider=config.provider,
+        api_key=deobfuscate(config.api_key),
+        base_url=config.base_url,
+        model_name=config.model_name,
+        updated_at=config.updated_at
+    )
 
 
 def update_model_config(db: Session, provider: str, api_key: str, base_url: str, model_name: str) -> ModelConfig:
-    config = get_or_create_model_config(db)
+    config = db.get(ModelConfig, 1) or ModelConfig(id=1)
     config.provider = provider
-    config.api_key = api_key
+    config.api_key = obfuscate(api_key)
     config.base_url = base_url
     config.model_name = model_name
     db.add(config)
     db.commit()
     db.refresh(config)
-    return config
+    return get_or_create_model_config(db)

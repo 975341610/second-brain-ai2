@@ -1,9 +1,25 @@
+import base64
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
+
+
+def obfuscate(text: str) -> str:
+    if not text:
+        return ""
+    return base64.b64encode(text.encode("utf-8")).decode("utf-8")
+
+
+def deobfuscate(text: str) -> str:
+    if not text:
+        return ""
+    try:
+        return base64.b64decode(text.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return text
 
 
 class Notebook(Base):
@@ -28,12 +44,18 @@ class Note(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     tags: Mapped[str] = mapped_column(String(500), default="")
     notebook_id: Mapped[int | None] = mapped_column(ForeignKey("notebooks.id", ondelete="SET NULL"), nullable=True, index=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("notes.id", ondelete="SET NULL"), nullable=True, index=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
+    is_title_manually_edited: Mapped[bool] = mapped_column(Integer, default=0)  # 0 for false, 1 for true
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     notebook: Mapped[Notebook | None] = relationship(back_populates="notes")
+    parent: Mapped["Note | None"] = relationship("Note", remote_side=[id], back_populates="children")
+    children: Mapped[list["Note"]] = relationship("Note", back_populates="parent", cascade="all, delete-orphan")
+
+    properties: Mapped[list["NoteProperty"]] = relationship(back_populates="note", cascade="all, delete-orphan")
 
     links_from: Mapped[list["NoteLink"]] = relationship(
         back_populates="source", foreign_keys="NoteLink.source_note_id", cascade="all, delete-orphan"
@@ -54,6 +76,18 @@ class NoteLink(Base):
 
     source: Mapped[Note] = relationship(back_populates="links_from", foreign_keys=[source_note_id])
     target: Mapped[Note] = relationship(back_populates="links_to", foreign_keys=[target_note_id])
+
+
+class NoteProperty(Base):
+    __tablename__ = "note_properties"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    type: Mapped[str] = mapped_column(String(50))  # text, number, date, select, multi_select
+    value: Mapped[str] = mapped_column(Text)  # JSON string for complex values
+
+    note: Mapped[Note] = relationship(back_populates="properties")
 
 
 class Task(Base):

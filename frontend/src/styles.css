@@ -15,6 +15,30 @@ body {
   background: var(--paper);
 }
 
+@keyframes purple-gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.bg-ai-gradient {
+  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+  background-size: 400% 400%;
+  animation: purple-gradient-flow 15s ease infinite;
+}
+
+.bg-notion-ai {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+}
+
+.text-ai-shimmer {
+  background: linear-gradient(to right, #7c3aed, #db2777, #7c3aed);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: purple-gradient-flow 3s linear infinite;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -65,8 +89,71 @@ textarea {
 .tiptap-editor ol,
 .tiptap-preview ol,
 .tiptap-editor table,
-.tiptap-preview table {
+.tiptap-preview table,
+.tiptap-editor ul[data-type="taskList"],
+.tiptap-preview ul[data-type="taskList"] {
   margin: 0.75rem 0;
+}
+
+.tiptap-editor ul[data-type="taskList"],
+.tiptap-preview ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+}
+
+.tiptap-editor ul[data-type="taskList"] li,
+.tiptap-preview ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.tiptap-editor ul[data-type="taskList"] li > label,
+.tiptap-preview ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  user-select: none;
+  margin-top: 0.2rem;
+}
+
+.tiptap-editor ul[data-type="taskList"] li > div,
+.tiptap-preview ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+
+.tiptap-editor ul[data-type="taskList"] input[type="checkbox"],
+.tiptap-preview ul[data-type="taskList"] input[type="checkbox"] {
+  cursor: pointer;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 4px;
+  border: 2px solid #d1d5db;
+  appearance: none;
+  background-color: white;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tiptap-editor ul[data-type="taskList"] input[type="checkbox"]:checked,
+.tiptap-preview ul[data-type="taskList"] input[type="checkbox"]:checked {
+  background-color: #10b981;
+  border-color: #10b981;
+}
+
+.tiptap-editor ul[data-type="taskList"] input[type="checkbox"]:checked::after,
+.tiptap-preview ul[data-type="taskList"] input[type="checkbox"]:checked::after {
+  content: "✓";
+  color: white;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.tiptap-editor ul[data-type="taskList"] li[data-checked="true"] > div,
+.tiptap-preview ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: #9ca3af;
 }
 
 .tiptap-editor table,
@@ -367,40 +454,163 @@ textarea {
   background: #111827;
 }
 
-.notion-drag-handle {
-  z-index: 15;
-  pointer-events: auto;
-  opacity: 0;
-  transition: opacity 180ms ease, transform 180ms ease;
+.notion-editor-layout {
+  background-color: #ffffff;
 }
 
-.notion-drag-handle.is-visible {
+.tiptap-notion {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 10px 40px 160px 40px;
+  min-height: calc(100vh - 200px);
+}
+
+.tiptap-notion > *:first-child {
+  margin-top: 0;
+}
+
+.tiptap-notion > * {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.tiptap-notion h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-top: 1.2em;
+  margin-bottom: 0.3em;
+  color: #1a1a1a;
+}
+
+.tiptap-notion h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin-top: 1.2em;
+  margin-bottom: 0.3em;
+  color: #1a1a1a;
+}
+
+.tiptap-notion h3 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.2em;
+  color: #1a1a1a;
+}
+
+.tiptap-notion p {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #37352f;
+}
+
+/* Precise positioning for the hover toolbar */
+.notion-block-toolbar {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform: translateX(-100%);
+  margin-left: -12px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.notion-block-toolbar:hover {
   opacity: 1;
 }
 
-.notion-drag-handle > div {
-  transform: translateX(-12px);
+.notion-slash-menu {
+  box-shadow: 0 10px 30px -10px rgba(0,0,0,0.15), 0 4px 10px -2px rgba(0,0,0,0.05);
 }
 
-.notion-block-toolbar {
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(231, 229, 228, 0.9);
-  transition: box-shadow 180ms ease, transform 180ms ease, opacity 180ms ease, background-color 180ms ease;
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tiptap-notion ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.tiptap-notion ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-notion ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  user-select: none;
+  margin-right: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.tiptap-notion ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+
+.tiptap-notion ul[data-type="taskList"] input[type="checkbox"] {
+  cursor: pointer;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 4px;
+  border: 2px solid #d1d5db;
+  appearance: none;
+  background-color: white;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.tiptap-notion ul[data-type="taskList"] input[type="checkbox"]:checked {
+  background-color: #10b981;
+  border-color: #10b981;
+}
+
+.tiptap-notion ul[data-type="taskList"] input[type="checkbox"]:checked::after {
+  content: "✓";
+  color: white;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.tiptap-notion ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
+/* Property Panel Alignment */
+.property-panel-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
 
 .notion-block-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.7rem;
-  padding: 0.35rem;
-  color: #78716c;
-  transition: background-color 140ms ease, color 140ms ease;
+  border-radius: 4px;
+  padding: 2px;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
 }
 
 .notion-block-button:hover {
-  background: rgba(87, 83, 78, 0.06);
-  color: #292524;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.notion-block-button.cursor-grab:active {
+  cursor: grabbing;
 }
 
 .tiptap-editor > *:hover .notion-drag-handle,
@@ -415,7 +625,7 @@ textarea {
 }
 
 .tiptap-editor > *:hover {
-  background: rgba(87, 83, 78, 0.035);
+  background: transparent;
 }
 
 .tiptap-editor pre:hover,
@@ -480,36 +690,119 @@ textarea {
 .tiptap-editor {
   overflow-wrap: anywhere;
   word-break: break-word;
-  font-size: 15px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 1.6;
+  padding-bottom: 20vh;
+}
+
+.tiptap-editor h1,
+.tiptap-preview h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  margin: 3rem 0 0.75rem;
+  color: #111827;
+  font-family: inherit;
+  letter-spacing: -0.025em;
+}
+
+.tiptap-editor h2,
+.tiptap-preview h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 2rem 0 0.5rem;
+  color: #111827;
+  font-family: inherit;
+  letter-spacing: -0.025em;
+}
+
+.tiptap-editor h3,
+.tiptap-preview h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+  color: #111827;
+  font-family: inherit;
 }
 
 .tiptap-editor p,
-.tiptap-preview p,
-.tiptap-editor li,
-.tiptap-preview li,
-.tiptap-editor td,
-.tiptap-preview td,
-.tiptap-editor th,
-.tiptap-preview th,
-.tiptap-editor h1,
-.tiptap-editor h2,
-.tiptap-editor h3,
-.tiptap-preview h1,
-.tiptap-preview h2,
-.tiptap-preview h3 {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  white-space: pre-wrap;
+.tiptap-preview p {
+  margin: 0.625rem 0;
+  color: #374151;
+  font-size: 16px;
+  line-height: 1.625;
 }
 
-.tiptap-editor pre,
-.tiptap-preview pre {
-  overflow-x: auto;
-  border-radius: 1rem;
-  background: #1f2937;
-  color: #f8fafc;
+.tiptap-editor a {
+  color: #2563eb;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.3);
+  transition: all 0.2s;
+}
+
+.tiptap-editor a:hover {
+  background-color: rgba(37, 99, 235, 0.1);
+  border-bottom-color: rgba(37, 99, 235, 0.8);
+}
+
+.notion-blockquote {
+  border-left: 3px solid #e5e7eb;
+  padding-left: 1.25rem;
+  margin: 1rem 0;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.notion-code-block {
+  background: #f3f4f6;
+  border-radius: 0.5rem;
   padding: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  margin: 1rem 0;
+  color: #1f2937;
+}
+
+.notion-bullet-list,
+.tiptap-notion ul:not([data-type="taskList"]),
+.notion-ordered-list,
+.tiptap-notion ol {
+  padding-left: 1.5rem !important;
+  margin: 1rem 0 !important;
+}
+
+.notion-bullet-list,
+.tiptap-notion ul:not([data-type="taskList"]) {
+  list-style-type: disc !important;
+}
+
+.notion-ordered-list,
+.tiptap-notion ol {
+  list-style-type: decimal !important;
+}
+
+.notion-blockquote,
+.tiptap-notion blockquote {
+  border-left: 4px solid #f59e0b !important;
+  background: #fef3c7 !important;
+  border-radius: 0 1rem 1rem 0 !important;
+  padding: 0.9rem 1rem !important;
+  margin: 1rem 0 !important;
+}
+
+.notion-code-block,
+.tiptap-notion pre {
+  background: #f3f4f6 !important;
+  border-radius: 0.5rem !important;
+  padding: 1.25rem !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-size: 0.9rem !important;
+  margin: 1.5rem 0 !important;
+  color: #1f2937 !important;
+  overflow-x: auto !important;
+}
+
+.tiptap-notion li p {
+  margin: 0 !important;
 }
 
 .tiptap-preview {
@@ -518,9 +811,18 @@ textarea {
 }
 
 .tiptap-editor a,
-.tiptap-preview a {
+.tiptap-preview a,
+.wiki-link {
   color: #0f766e;
   text-decoration: underline;
+  cursor: pointer;
+}
+
+.wiki-link {
+  background: rgba(16, 185, 129, 0.1);
+  padding: 0 0.2rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
 }
 
 @media (max-width: 1279px) {
