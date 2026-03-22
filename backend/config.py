@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     top_k: int = 5
     cors_origins: list[str] = ["*"]
     sample_docs_path: str = Field(default=(runtime_root() / "data" / "sample_docs").as_posix())
+    uploads_path: str = Field(default=(runtime_root() / "data" / "uploads").as_posix())
 
     model_config = SettingsConfigDict(env_file=str(PROJECT_DIR / ".env"), extra="ignore")
 
@@ -40,4 +41,5 @@ def get_settings() -> Settings:
     settings = Settings()
     Path(settings.sqlite_url.replace("sqlite:///", "")).parent.mkdir(parents=True, exist_ok=True)
     Path(settings.chroma_path).mkdir(parents=True, exist_ok=True)
+    Path(settings.uploads_path).mkdir(parents=True, exist_ok=True)
     return settings

@@ -32,6 +32,11 @@ assets_dir = frontend_dist / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+# Mount media uploads
+uploads_dir = Path(settings.uploads_path)
+if uploads_dir.exists():
+    app.mount("/api/media/files", StaticFiles(directory=uploads_dir), name="media")
+
 def run_migrations() -> None:
     inspector = inspect(engine)
     with engine.begin() as connection:

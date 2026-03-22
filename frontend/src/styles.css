@@ -156,144 +156,180 @@ textarea {
   color: #9ca3af;
 }
 
-.tiptap-editor table,
-.tiptap-preview table {
+.tiptap-editor table {
   width: 100%;
   border-collapse: collapse;
-  border-radius: 0.9rem;
-  overflow: hidden;
-  background: rgba(251, 251, 250, 0.98);
-  box-shadow: inset 0 0 0 1px rgba(87, 83, 78, 0.08);
+  table-layout: fixed;
+  margin: 1rem 0;
 }
 
 .tiptap-editor th,
-.tiptap-editor td,
-.tiptap-preview th,
-.tiptap-preview td {
-  border: 1px solid rgba(87, 83, 78, 0.14);
-  padding: 0.65rem 0.8rem;
-  min-width: 120px;
-}
-
-.tiptap-editor th,
-.tiptap-preview th {
-  background: rgba(245, 245, 244, 0.92);
-  font-weight: 600;
-  color: #44403c;
+.tiptap-editor td {
+  min-width: 100px;
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
   position: relative;
-  font-size: 13px;
-  letter-spacing: 0.01em;
-  padding-top: 1.1rem;
-  padding-right: 2rem;
-  cursor: pointer;
-  transition: background-color 140ms ease, box-shadow 140ms ease;
+  vertical-align: top;
+  text-align: left;
+}
+
+.tiptap-editor th {
+  background-color: #f8fafc;
+  font-weight: 600;
+}
+
+/* 单元格选择效果 */
+.tiptap-editor .selectedCell:after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(186, 218, 251, 0.3);
+  pointer-events: none;
+}
+
+/* 列调整手柄 */
+.tiptap-editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  z-index: 20;
+  background-color: #3b82f6;
+  pointer-events: none;
+}
+
+/* 表格容器样式，允许横向滚动 */
+.tiptap-editor .tableWrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+/* 增强按钮的容器 - 现在使用 Portal 挂载，由 React 控制显隐 */
+.table-controls-container {
+  opacity: 1;
+  pointer-events: none;
 }
 
 .tiptap-editor th::before,
 .tiptap-preview th::before {
-  content: attr(data-property-type-label);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-bottom: 0.35rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  padding: 0.15rem 0.45rem;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #a8a29e;
+  display: none !important;
 }
 
-.tiptap-editor th[data-property-type='text']::before,
-.tiptap-preview th[data-property-type='text']::before {
-  content: 'Aa 文本';
-}
-
-.tiptap-editor td[data-property-type='text'],
-.tiptap-preview td[data-property-type='text'] {
-  color: #44403c;
-}
-
-.tiptap-editor th[data-property-type='number']::before,
-.tiptap-preview th[data-property-type='number']::before {
-  content: '# 数字';
-}
-
-.tiptap-editor td[data-property-type='number'],
-.tiptap-preview td[data-property-type='number'] {
-  font-variant-numeric: tabular-nums;
-  color: #c2410c;
-  text-align: right;
-}
-
-.tiptap-editor th[data-property-type='select']::before,
-.tiptap-preview th[data-property-type='select']::before {
-  content: '◉ 选项';
-}
-
-.tiptap-editor td[data-property-type='select'],
-.tiptap-preview td[data-property-type='select'] {
-  color: #047857;
-  background: rgba(248, 250, 252, 0.92);
-  white-space: normal;
-}
-
-.tiptap-editor td[data-property-type='select'],
-.tiptap-preview td[data-property-type='select'] {
-  font-weight: 600;
-}
-
-.tiptap-editor th[data-property-type='date']::before,
-.tiptap-preview th[data-property-type='date']::before {
-  content: '📅 日期';
-}
-
-.tiptap-editor td[data-property-type='date'],
-.tiptap-preview td[data-property-type='date'] {
-  background: rgba(248, 250, 252, 0.92);
-  color: #2563eb;
-  white-space: nowrap;
-}
-
-.tiptap-editor th[data-property-type='checkbox']::before,
-.tiptap-preview th[data-property-type='checkbox']::before {
-  content: '☑ 勾选';
-}
-
-.tiptap-editor td[data-property-type='checkbox'],
-.tiptap-preview td[data-property-type='checkbox'] {
-  text-align: center;
-  background: rgba(248, 250, 252, 0.92);
-  color: #7c3aed;
-  font-weight: 600;
-}
-
-.tiptap-editor th::after,
-.tiptap-preview th::after {
+.tiptap-editor th::after {
   content: '⋯';
   position: absolute;
-  right: 0.7rem;
-  top: 0.7rem;
-  display: inline-flex;
+  right: 4px;
+  top: 4px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  height: 1.15rem;
-  width: 1.15rem;
-  border-radius: 999px;
-  color: #a8a29e;
+  height: 24px;
+  width: 24px;
+  border-radius: 4px;
+  color: #94a3b8;
   opacity: 0;
-  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease;
-  transform: scale(0.96);
+  transition: all 0.2s ease;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 50;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .tiptap-editor th:hover::after,
 .tiptap-preview th:hover::after {
   opacity: 1;
-  background: rgba(87, 83, 78, 0.08);
-  color: #57534e;
-  transform: scale(1);
+  background: rgba(87, 83, 78, 0.12);
+  color: #1c1917;
+  transform: scale(1.1);
+}
+
+
+
+/* 改进表格内的光标样式，确保跟随鼠标且不被误导 */
+.tiptap-editor table,
+.tiptap-editor td,
+.tiptap-editor th,
+.tiptap-editor .tableWrapper {
+  cursor: text !important;
+}
+
+/* 针对 BubbleMenu 的全局定位优化 */
+.tiptap-editor .tippy-box[data-animation='fade'] {
+  transform: translateY(-10px) !important; /* 强制所有气泡菜单向上偏移，减少遮挡 */
+}
+
+/* 确保单元格内的段落也能正确响应光标 */
+.tiptap-editor td > p,
+.tiptap-editor th > p {
+  cursor: text !important;
+  margin: 0; /* 飞书风格：单元格内段落间距紧凑 */
+}
+
+/* 飞书风格：选中的单元格边框 */
+.tiptap-editor .selectedCell {
+  background: rgba(37, 99, 235, 0.05) !important;
+  position: relative;
+}
+
+.tiptap-editor .selectedCell::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  border: 2px solid #2563eb;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Unified table styles */
+
+/* 隐藏原生的 Tiptap 增加按钮（如果我们自己实现了） */
+.tiptap-editor .tableWrapper .column-resize-handle {
+  background-color: #3b82f6;
+}
+
+.tiptap-editor .resize-cursor {
+  cursor: col-resize !important;
+}
+
+/* 改进后的表头 ... 菜单，位置更精准且不挡内容 */
+.tiptap-editor th::after {
+  content: '⋯';
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 4px;
+  color: #94a3b8;
+  opacity: 0;
+  transition: all 0.2s ease;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 50;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tiptap-editor th:hover::after,
+.tiptap-preview th:hover::after {
+  opacity: 1;
+  background: rgba(87, 83, 78, 0.12);
+  color: #1c1917;
+  transform: scale(1.1);
 }
 
 .tiptap-editor th:hover,
@@ -628,13 +664,7 @@ textarea {
   background: transparent;
 }
 
-.tiptap-editor pre:hover,
-.tiptap-preview pre:hover,
-.tiptap-editor pre:focus-within,
-.tiptap-preview pre:focus-within {
-  background: #1f2937;
-  box-shadow: none;
-}
+
 
 .editor-pane.dragging-block .tiptap-editor > * {
   opacity: 0.92;
@@ -752,15 +782,7 @@ textarea {
   font-style: italic;
 }
 
-.notion-code-block {
-  background: #f3f4f6;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.875rem;
-  margin: 1rem 0;
-  color: #1f2937;
-}
+
 
 .notion-bullet-list,
 .tiptap-notion ul:not([data-type="taskList"]),
@@ -791,14 +813,89 @@ textarea {
 
 .notion-code-block,
 .tiptap-notion pre {
-  background: #f3f4f6 !important;
-  border-radius: 0.5rem !important;
-  padding: 1.25rem !important;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
-  font-size: 0.9rem !important;
-  margin: 1.5rem 0 !important;
-  color: #1f2937 !important;
-  overflow-x: auto !important;
+  border-radius: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+  margin: 0;
+  overflow-x: auto;
+}
+
+/* Syntax Highlighting (Atom One Light Inspired) */
+.hljs-comment,
+.hljs-quote {
+  color: #a0a1a7;
+  font-style: italic;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-formula {
+  color: #a626a4;
+}
+
+.hljs-section,
+.hljs-name,
+.hljs-selector-tag,
+.hljs-deletion,
+.hljs-subst {
+  color: #e45649;
+}
+
+.hljs-literal {
+  color: #0184a3;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta-string {
+  color: #50a14f;
+}
+
+.hljs-built_in,
+.hljs-class .hljs-title {
+  color: #c18401;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-number {
+  color: #986801;
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-title {
+  color: #4078f2;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-link {
+  text-decoration: underline;
+}
+
+.code-block-wrapper {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.code-block-wrapper:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
 }
 
 .tiptap-notion li p {

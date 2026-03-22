@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import os
+import uuid
+import shutil
+from pathlib import Path
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -166,6 +170,86 @@ async def upload_documents(files: list[UploadFile] = File(...), db: Session = De
         title, parsed = parse_document(file.filename, content)
         imported.append(await persist_note(db, title, parsed, default_notebook.id))
     return UploadResponse(imported_notes=imported)
+
+
+@router.post("/media/upload")
+async def upload_media_api(file: UploadFile = File(...)):
+    """
+    Handles file upload for media assets (images, videos, etc.)
+    Stores files in the uploads directory and returns a URL.
+    """
+    try:
+        ext = os.path.splitext(file.filename)[1]
+        unique_name = f"{uuid.uuid4()}{ext}"
+        save_path = Path(settings.uploads_path) / unique_name
+        
+        with open(save_path, "wb") as f:
+            f.write(await file.read())
+            
+        return {
+            "url": f"/api/media/files/{unique_name}",
+            "name": file.filename,
+            "size": save_path.stat().st_size,
+            "type": file.content_type
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@router.post("/media/upload/init")
+async def upload_media_init(filename: str = Form(...), size: int = Form(...)):
+    upload_id = str(uuid.uuid4())
+    temp_dir = Path(settings.uploads_path) / "temp" / upload_id
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return {"upload_id": upload_id}
+
+
+@router.post("/media/upload/chunk")
+async def upload_media_chunk(
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    file: UploadFile = File(...)
+):
+    temp_dir = Path(settings.uploads_path) / "temp" / upload_id
+    if not temp_dir.exists():
+        raise HTTPException(status_code=400, detail="Invalid upload_id")
+    
+    chunk_path = temp_dir / f"chunk_{chunk_index}"
+    with open(chunk_path, "wb") as f:
+        f.write(await file.read())
+    return {"status": "ok"}
+
+
+@router.post("/media/upload/complete")
+async def upload_media_complete(
+    upload_id: str = Form(...),
+    filename: str = Form(...),
+    content_type: str = Form(...)
+):
+    temp_dir = Path(settings.uploads_path) / "temp" / upload_id
+    if not temp_dir.exists():
+        raise HTTPException(status_code=400, detail="Invalid upload_id")
+    
+    ext = os.path.splitext(filename)[1]
+    unique_name = f"{uuid.uuid4()}{ext}"
+    final_path = Path(settings.uploads_path) / unique_name
+    
+    # Sort chunks and merge
+    chunks = sorted(temp_dir.glob("chunk_*"), key=lambda p: int(p.name.split("_")[1]))
+    with open(final_path, "wb") as outfile:
+        for chunk_path in chunks:
+            with open(chunk_path, "rb") as infile:
+                shutil.copyfileobj(infile, outfile)
+    
+    # Cleanup
+    shutil.rmtree(temp_dir)
+    
+    return {
+        "url": f"/api/media/files/{unique_name}",
+        "name": filename,
+        "size": final_path.stat().st_size,
+        "type": content_type
+    }
 
 
 @router.post("/ask", response_model=AskResponse)

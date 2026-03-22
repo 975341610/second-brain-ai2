@@ -118,10 +118,13 @@ SlashMenu.displayName = 'SlashMenu';
 export const getSuggestionConfig = (itemsRef: React.MutableRefObject<SlashItem[]>) => ({
   items: ({ query }: { query: string }) => {
     const items = itemsRef.current;
-    return items.filter(item => {
+    console.log("Slash Menu Query:", query, "Items count:", items.length);
+    const filtered = items.filter(item => {
       const q = query.toLowerCase();
       return item.label.toLowerCase().includes(q) || item.keywords.some(k => k.toLowerCase().includes(q));
-    }).slice(0, 20);
+    });
+    console.log("Filtered items:", filtered.map(i => i.label));
+    return filtered.slice(0, 20);
   },
 
   render: () => {
@@ -130,12 +133,14 @@ export const getSuggestionConfig = (itemsRef: React.MutableRefObject<SlashItem[]
 
     return {
       onStart: (props: any) => {
+        console.log("Slash Menu onStart triggered at:", props.clientRect);
         component = new ReactRenderer(SlashMenu, {
           props,
           editor: props.editor,
         });
 
         if (!props.clientRect) {
+          console.warn("Slash Menu Start failed: No clientRect provided");
           return;
         }
 
@@ -148,6 +153,7 @@ export const getSuggestionConfig = (itemsRef: React.MutableRefObject<SlashItem[]
           trigger: 'manual',
           placement: 'bottom-start',
         });
+        console.log("Slash Menu Popup created");
       },
 
       onUpdate(props: any) {

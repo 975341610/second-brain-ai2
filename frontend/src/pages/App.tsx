@@ -100,6 +100,7 @@ export default function App() {
   ] as const;
 
   return (
+    <>
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(248,214,135,0.45),_transparent_35%),linear-gradient(135deg,_#f4efe4,_#d9e7df_55%,_#f7f4ee)] p-4 text-stone-900 lg:p-6">
       <div className="mx-auto mb-4 flex max-w-[1680px] items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-xs font-medium">
@@ -217,5 +218,9 @@ export default function App() {
         </>
       )}
     </main>
+    <div className="fixed bottom-4 left-4 z-50 text-[10px] text-stone-400 font-mono pointer-events-none opacity-50">
+      v0.3.21-table-final-fix
+    </div>
+    </>
   );
 }

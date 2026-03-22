@@ -8,6 +8,7 @@ import TaskList from '@tiptap/extension-task-list';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import React from 'react';
 import { MediaNodeView } from '../components/MediaNodeView';
+import { FileBlockView } from '../components/editor/FileBlockView';
 
 export { TaskList, TaskItem };
 
@@ -147,6 +148,11 @@ export const ResizableImage = Image.extend({
         parseHTML: (element) => element.getAttribute('data-width') || '100%',
         renderHTML: (attributes) => ({ 'data-width': attributes.width, style: `width:${attributes.width};` }),
       },
+      'data-upload-id': {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-upload-id'),
+        renderHTML: (attributes) => attributes['data-upload-id'] ? { 'data-upload-id': attributes['data-upload-id'] } : {},
+      },
     };
   },
   addNodeView() {
@@ -161,7 +167,15 @@ export const AudioNode = Node.create({
   draggable: true,
   selectable: true,
   addAttributes() {
-    return { src: { default: '' }, width: { default: '100%' } };
+    return { 
+      src: { default: '' }, 
+      width: { default: '100%' },
+      'data-upload-id': {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-upload-id'),
+        renderHTML: (attributes) => attributes['data-upload-id'] ? { 'data-upload-id': attributes['data-upload-id'] } : {},
+      },
+    };
   },
   parseHTML() {
     return [{ tag: 'audio[src]' }];
@@ -181,7 +195,15 @@ export const VideoNode = Node.create({
   draggable: true,
   selectable: true,
   addAttributes() {
-    return { src: { default: '' }, width: { default: '100%' } };
+    return { 
+      src: { default: '' }, 
+      width: { default: '100%' },
+      'data-upload-id': {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-upload-id'),
+        renderHTML: (attributes) => attributes['data-upload-id'] ? { 'data-upload-id': attributes['data-upload-id'] } : {},
+      },
+    };
   },
   parseHTML() {
     return [{ tag: 'video[src]' }];
@@ -215,6 +237,36 @@ export const EmbedNode = Node.create({
   },
   addNodeView() {
     return ReactNodeViewRenderer((props) => React.createElement(MediaNodeView, { ...props, kind: 'embed' }));
+  },
+});
+
+export const FileNode = Node.create({
+  name: 'fileNode',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      src: { default: '' },
+      name: { default: '未命名文件' },
+      size: { default: 0 },
+      type: { default: '' },
+      'data-upload-id': {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-upload-id'),
+        renderHTML: (attributes) => attributes['data-upload-id'] ? { 'data-upload-id': attributes['data-upload-id'] } : {},
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-type="file-card"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'file-card', class: 'notion-file-block' })];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer((props) => React.createElement(MediaNodeView, { ...props, kind: 'file' }));
   },
 });
 

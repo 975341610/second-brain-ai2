@@ -101,4 +101,51 @@ export const api = {
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   },
+  uploadMedia: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/media/upload`, { 
+      method: 'POST', 
+      body: formData 
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json() as Promise<{ url: string; name: string; size: number; type: string }>;
+  },
+  uploadMediaChunked: async (file: File) => {
+    const CHUNK_SIZE = 512 * 1024; // 512KB chunks
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+    // 1. Init
+    const initForm = new FormData();
+    initForm.append('filename', file.name);
+    initForm.append('size', file.size.toString());
+    const initRes = await fetch(`${API_BASE}/media/upload/init`, { method: 'POST', body: initForm });
+    if (!initRes.ok) throw new Error("Init upload failed");
+    const { upload_id } = await initRes.json();
+
+    // 2. Upload chunks
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      
+      const chunkForm = new FormData();
+      chunkForm.append('upload_id', upload_id);
+      chunkForm.append('chunk_index', i.toString());
+      chunkForm.append('file', chunk, file.name);
+
+      const chunkRes = await fetch(`${API_BASE}/media/upload/chunk`, { method: 'POST', body: chunkForm });
+      if (!chunkRes.ok) throw new Error(`Chunk ${i} upload failed`);
+    }
+
+    // 3. Complete
+    const completeForm = new FormData();
+    completeForm.append('upload_id', upload_id);
+    completeForm.append('filename', file.name);
+    completeForm.append('content_type', file.type);
+    const finalRes = await fetch(`${API_BASE}/media/upload/complete`, { method: 'POST', body: completeForm });
+    if (!finalRes.ok) throw new Error("Complete upload failed");
+    
+    return finalRes.json() as Promise<{ url: string; name: string; size: number; type: string }>;
+  },
 };
