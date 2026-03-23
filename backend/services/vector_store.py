@@ -4,15 +4,29 @@ from typing import Any
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 
 from backend.config import get_settings
 
+
+class NoEmbeddingFunction(EmbeddingFunction):
+    """
+    由于我们在插入和查询时都手动提供了 embeddings（前端处理），
+    因此在后端初始化 chromadb 时不需要默认的嵌入函数，
+    这可以绕过 PyInstaller 打包时 onnxruntime 的加载报错并减小体积。
+    """
+    def __call__(self, input: Documents) -> Embeddings:
+        return []
 
 class VectorStore:
     def __init__(self) -> None:
         settings = get_settings()
         self.client = chromadb.PersistentClient(path=settings.chroma_path, settings=ChromaSettings(anonymized_telemetry=False))
-        self.collection = self.client.get_or_create_collection(name="second_brain_chunks", metadata={"hnsw:space": "cosine"})
+        self.collection = self.client.get_or_create_collection(
+            name="second_brain_chunks", 
+            metadata={"hnsw:space": "cosine"},
+            embedding_function=NoEmbeddingFunction()
+        )
 
     def upsert_chunks(self, items: list[dict[str, Any]]) -> None:
         if not items:
