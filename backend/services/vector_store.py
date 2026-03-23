@@ -4,7 +4,16 @@ from typing import Any
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
+
+# 💡 安全导入 EmbeddingFunction 基类
+try:
+    from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
+except (ImportError, NameError):
+    # Fallback 如果 chromadb 内部结构在打包时出故障
+    class EmbeddingFunction:
+        def __call__(self, input): return []
+    Documents = list
+    Embeddings = list
 
 from backend.config import get_settings
 
