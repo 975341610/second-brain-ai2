@@ -30,6 +30,7 @@ type SidebarProps = {
   onDeleteNote: (noteId: number) => void;
   onRestoreNote: (noteId: number) => void;
   onPurgeNote: (noteId: number) => void;
+  onPurgeTrash: () => void;
   onUpload: (files: File[]) => void;
 };
 
@@ -60,6 +61,7 @@ export function Sidebar({
   onDeleteNote,
   onRestoreNote,
   onPurgeNote,
+  onPurgeTrash,
   onUpload,
 }: SidebarProps) {
   const [query, setQuery] = useState('');
@@ -199,10 +201,14 @@ export function Sidebar({
     const isDragOver = dragOverNoteId === note.id;
 
     return (
-      <div key={note.id} className="group flex flex-col">
+      <div key={note.id} className="flex flex-col">
         <div
-          className={`relative group rounded-[16px] border px-3 py-2 transition ${isSelected ? 'border-stone-300 bg-stone-100' : 'border-transparent bg-stone-50/50 hover:border-stone-200 hover:bg-white'} ${isDragOver ? 'ring-2 ring-amber-400' : ''}`}
-          style={{ marginLeft: `${level * 12}px` }}
+          className={`
+            relative group flex items-center gap-1.5 px-2 py-1 rounded-md transition-all cursor-pointer
+            ${isSelected ? 'bg-reflect-border/60 text-reflect-text font-medium' : 'text-reflect-muted hover:bg-reflect-border/30 hover:text-reflect-text'}
+            ${isDragOver ? 'ring-1 ring-reflect-accent/50' : ''}
+          `}
+          style={{ paddingLeft: `${(level + 1) * 10 + 6}px` }}
           draggable
           onDragStart={() => setDraggingNoteId(note.id)}
           onDragOver={(event) => {
@@ -216,66 +222,68 @@ export function Sidebar({
             event.stopPropagation();
             setDragOverNoteId(null);
             if (draggingNoteId === null || draggingNoteId === note.id) return;
-            // Drop onto a note makes it the parent
             onMoveNote(draggingNoteId, notebookId, children.length, note.id);
             setDraggingNoteId(null);
           }}
+          onClick={() => onSelectNote(note.id)}
         >
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCollapsedNotes((prev) => ({ ...prev, [note.id]: !prev[note.id] }))}
-              className={`p-0.5 hover:bg-stone-200 rounded transition ${children.length === 0 ? 'invisible' : ''}`}
-            >
-              {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-            </button>
-            <input type="checkbox" checked={selectedNoteIds.includes(note.id)} onChange={() => onToggleNoteSelection(note.id)} className="w-3.5 h-3.5" />
-            <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {children.length > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setCollapsedNotes((prev) => ({ ...prev, [note.id]: !prev[note.id] })) }}
+                className="p-0.5 hover:bg-reflect-border/50 rounded transition opacity-60 hover:opacity-100"
+              >
+                {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+              </button>
+            )}
+            
+            <div className="flex-1 truncate">
               {noteEditing ? (
-                <div className="space-y-2 rounded-2xl bg-white p-3 shadow-sm border border-stone-100">
-                  {editingNoteMode === 'rename' ? (
-                    <input autoFocus value={editingNoteTitle} onChange={(event) => setEditingNoteTitle(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && (onUpdateNote(note.id, { title: editingNoteTitle }), setEditingNoteId(null))} className="w-full rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm" />
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => noteIconInputRef.current?.click()} className="rounded-xl border border-stone-200 bg-white px-2 py-1.5 text-lg">{isDataIcon(editingNoteIcon) ? '📷' : editingNoteIcon}</button>
-                      <input autoFocus value={isDataIcon(editingNoteIcon) ? '' : editingNoteIcon} onChange={(event) => setEditingNoteIcon(event.target.value || defaultIconFor('note'))} className="w-full rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm" placeholder="输入 emoji" />
-                    </div>
-                  )}
-                  <div className="flex justify-end gap-1.5">
-                    <button onClick={() => setEditingNoteId(null)} className="rounded-xl px-2.5 py-1 text-xs text-stone-500 hover:bg-stone-100">取消</button>
-                    <button onClick={() => { onUpdateNote(note.id, editingNoteMode === 'rename' ? { title: editingNoteTitle } : { icon: editingNoteIcon }); setEditingNoteId(null); }} className="rounded-xl bg-stone-900 px-2.5 py-1 text-xs text-white">保存</button>
-                  </div>
-                </div>
+                <input 
+                  autoFocus 
+                  value={editingNoteTitle} 
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(event) => setEditingNoteTitle(event.target.value)} 
+                  onKeyDown={(e) => e.key === 'Enter' && (onUpdateNote(note.id, { title: editingNoteTitle }), setEditingNoteId(null))} 
+                  className="w-full bg-white border border-reflect-border px-2 py-0.5 text-xs rounded outline-none" 
+                />
               ) : (
-                <button onClick={() => onSelectNote(note.id)} className="flex items-center gap-2 w-full text-left truncate">
-                  <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">{renderIcon(note.icon, defaultIconFor('note'))}</span>
-                  <span className="truncate text-sm font-medium text-stone-700">{note.title}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="flex-shrink-0 text-xs opacity-70">{renderIcon(note.icon, defaultIconFor('note'))}</span>
+                  <span className="truncate text-xs leading-relaxed">{note.title}</span>
+                </div>
               )}
             </div>
-            {!noteEditing && (
-              <div className="flex items-center gap-0.5">
-                <button onClick={() => onCreateNoteInNotebook(notebookId, note.id)} className="p-1 text-stone-400 opacity-0 group-hover:opacity-100 hover:bg-stone-200 rounded transition">
-                  <Plus size={14} />
-                </button>
-                <div className="relative">
-                  <button onClick={() => setActiveNoteMenuId(activeNoteMenuId === note.id ? null : note.id)} className="p-1 text-stone-400 opacity-0 group-hover:opacity-100 hover:bg-stone-200 rounded transition">
-                    <MoreHorizontal size={14} />
-                  </button>
-                  {activeNoteMenuId === note.id && (
-                    <div className="absolute right-0 top-7 z-30 w-32 rounded-xl border border-stone-100 bg-white p-1 shadow-xl">
-                      <button onClick={() => { startNoteEdit(note, 'rename'); setActiveNoteMenuId(null); }} className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-stone-50">重命名</button>
-                      <button onClick={() => { startNoteEdit(note, 'icon'); setActiveNoteMenuId(null); }} className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-stone-50">更改图标</button>
-                      <div className="h-px bg-stone-100 my-1" />
-                      <button onClick={() => { onDeleteNote(note.id); setActiveNoteMenuId(null); }} className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-rose-600 hover:bg-rose-50">删除</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
+
+          {!noteEditing && (
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                onClick={(e) => { e.stopPropagation(); onCreateNoteInNotebook(notebookId, note.id); }} 
+                className="p-1 hover:bg-reflect-border/50 rounded text-reflect-muted hover:text-reflect-text"
+              >
+                <Plus size={12} />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setActiveNoteMenuId(activeNoteMenuId === note.id ? null : note.id); }} 
+                className="p-1 hover:bg-reflect-border/50 rounded text-reflect-muted hover:text-reflect-text"
+              >
+                <MoreHorizontal size={12} />
+              </button>
+            </div>
+          )}
+
+          {activeNoteMenuId === note.id && (
+            <div className="absolute right-0 top-full mt-1 z-30 w-32 rounded-lg border border-reflect-border bg-white p-1 shadow-soft-lg">
+              <button onClick={() => { startNoteEdit(note, 'rename'); setActiveNoteMenuId(null); }} className="block w-full rounded px-2 py-1 text-left text-[11px] hover:bg-reflect-bg">重命名</button>
+              <button onClick={() => { startNoteEdit(note, 'icon'); setActiveNoteMenuId(null); }} className="block w-full rounded px-2 py-1 text-left text-[11px] hover:bg-reflect-bg">图标</button>
+              <div className="h-px bg-reflect-border my-1" />
+              <button onClick={() => { onDeleteNote(note.id); setActiveNoteMenuId(null); }} className="block w-full rounded px-2 py-1 text-left text-[11px] text-rose-600 hover:bg-rose-50">删除</button>
+            </div>
+          )}
         </div>
         {!isCollapsed && children.length > 0 && (
-          <div className="mt-0.5">
+          <div className="flex flex-col">
             {children.map((child, idx) => renderNoteTree(child, idx, notebookId, level + 1))}
           </div>
         )}
@@ -284,185 +292,257 @@ export function Sidebar({
   };
 
   return (
-    <aside className="flex h-full flex-col gap-4 rounded-[22px] border border-stone-200/80 bg-[rgba(255,255,255,0.78)] p-4 shadow-[0_12px_30px_rgba(28,25,23,0.06)] backdrop-blur">
-      <div className="px-1">
-        <div className="text-[11px] uppercase tracking-[0.28em] text-stone-400">Second Brain</div>
-        <h1 className="mt-2 font-display text-2xl text-stone-900">第二大脑</h1>
+    <aside className="flex h-full flex-col gap-5 py-6 px-3 font-sans antialiased text-reflect-text">
+      {/* Brand Header */}
+      <div className="px-2 mb-1">
+        <div className="text-[9px] uppercase tracking-[0.4em] text-reflect-muted font-bold opacity-40">Second Brain</div>
+        <h1 className="mt-0.5 font-serif text-xl text-reflect-text italic font-medium">Reflect</h1>
       </div>
 
-      <div className="grid gap-1 rounded-[18px] bg-stone-50 p-1.5">
-        <button onClick={() => onChangePage('home')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'home' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><Home size={15} /> 主页</span></button>
-        <button onClick={() => onChangePage('notes')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'notes' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><BookCopy size={15} /> 笔记</span></button>
-        <button onClick={() => onChangePage('database')} className={`rounded-[14px] px-3 py-2.5 text-sm font-medium ${activePage === 'database' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'}`}><span className="flex items-center justify-center gap-2"><Layout size={15} /> 数据库</span></button>
-      </div>
+      {/* Primary Navigation */}
+      <nav className="space-y-0.5">
+        {[
+          { id: 'home', label: '控制面板', icon: Home },
+          { id: 'notes', label: '所有笔记', icon: BookCopy },
+          { id: 'database', label: '收藏', icon: Layout },
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => onChangePage(item.id as any)}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[13px] font-medium rounded-lg transition-all ${
+              activePage === item.id 
+              ? 'bg-reflect-border/50 text-reflect-text shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]' 
+              : 'text-reflect-muted hover:bg-reflect-border/20 hover:text-reflect-text'
+            }`}
+          >
+            <item.icon size={15} className={activePage === item.id ? 'text-reflect-text' : 'opacity-50'} />
+            {item.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="flex gap-2">
-        {activePage === 'notes' && (
-        <button className="flex flex-1 items-center justify-center gap-2 rounded-[16px] bg-stone-900 px-4 py-2.5 text-sm font-medium text-stone-50" onClick={onCreateNote}>
-          <Plus size={16} /> 新建
-        </button>
-        )}
-        <label className="flex cursor-pointer items-center justify-center rounded-[16px] border border-stone-300 bg-white px-4 py-2.5 text-stone-700">
-          <UploadCloud size={16} />
-          <input className="hidden" multiple type="file" accept=".txt,.md,.pdf" onChange={handleUpload} />
-        </label>
-        <button onClick={() => onChangePage('settings')} className={`flex items-center justify-center rounded-[16px] border bg-white px-4 py-2.5 ${activePage === 'settings' ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-stone-700'}`}>
-          <Settings size={16} />
-        </button>
-      </div>
+      {/* Tags Section - More Compact Tag Cloud */}
+      {tagSet.length > 0 && (
+        <div className="px-2 space-y-1.5">
+          <div className="flex items-center justify-between group/tags">
+            <h2 className="text-[9px] font-bold uppercase tracking-widest text-reflect-muted opacity-40">标签</h2>
+            <button 
+              onClick={() => setShowAllTags(!showAllTags)}
+              className="p-0.5 hover:bg-reflect-border/50 rounded transition-colors text-reflect-muted opacity-0 group-hover/tags:opacity-100"
+            >
+              {showAllTags ? <ChevronDown size={10} className="rotate-180" /> : <ChevronDown size={10} />}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {visibleTags.map(tag => (
+              <button
+                key={tag}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                  activeTag === tag 
+                  ? 'bg-reflect-text text-white' 
+                  : 'bg-reflect-border/20 text-reflect-muted hover:bg-reflect-border/40 hover:text-reflect-text'
+                }`}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="h-px bg-reflect-border/30 mx-2" />
 
       {activePage === 'notes' && (
-      <>
-      <div className="rounded-[18px] border border-stone-200 bg-white px-3 py-3">
-        <div className="flex items-center gap-2 text-stone-500">
-          <Search size={16} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="搜索标题、摘要或内容" />
-          {query && (
-            <button className="text-stone-400" onClick={() => setQuery('')}>
-              <X size={14} />
+        <section className="flex-1 flex flex-col min-h-0 gap-3">
+          {/* Action Header */}
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-[9px] font-bold uppercase tracking-widest text-reflect-muted opacity-40">笔记本</h2>
+            <button 
+              onClick={() => setShowNotebookCreator(true)}
+              className="p-1 hover:bg-reflect-border/50 rounded-md transition-colors text-reflect-muted hover:text-reflect-text"
+            >
+              <Plus size={13} />
             </button>
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {activeTag && <button onClick={() => setActiveTag(null)} className="rounded-full bg-stone-900 px-3 py-1 text-xs font-medium text-white">清除筛选</button>}
-          {visibleTags.map((tag) => (
-            <button key={tag} onClick={() => setActiveTag(tag === activeTag ? null : tag)} className={`rounded-full px-3 py-1 text-xs font-medium ${tag === activeTag ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-              {tag}
-            </button>
-          ))}
-          {tagSet.length > 5 && <button onClick={() => setShowAllTags((value) => !value)} className="rounded-full bg-stone-200 px-3 py-1 text-xs font-medium text-stone-700">{showAllTags ? '收起标签' : `更多标签 +${tagSet.length - 5}`}</button>}
-        </div>
-      </div>
+          </div>
 
-      <section className="min-h-0 flex-1 overflow-hidden">
-        <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-stone-500">
-          <div className="flex items-center gap-2"><BookCopy size={16} /> 笔记本</div>
-          <button onClick={() => setShowNotebookCreator(true)} className="rounded-full bg-stone-900 px-3 py-1 text-xs text-white"><span className="flex items-center gap-1"><FolderPlus size={12} /> 新建本</span></button>
-        </div>
-
-        {selectedNoteIds.length > 0 && (
-          <div className="mb-3 rounded-[20px] border border-amber-200 bg-amber-50 p-3 text-sm">
-            <div className="font-medium text-amber-900">已选中 {selectedNoteIds.length} 条笔记</div>
-            <div className="mt-2 flex gap-2">
-              <select value={bulkTargetNotebookId} onChange={(event) => setBulkTargetNotebookId(event.target.value ? Number(event.target.value) : '')} className="flex-1 rounded-2xl border border-amber-200 bg-white px-3 py-2 text-sm">
-                <option value="">选择目标笔记本</option>
-                {notebooks.map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}
-              </select>
-              <button onClick={() => bulkTargetNotebookId && onBulkMoveNotes(Number(bulkTargetNotebookId))} className="rounded-2xl bg-stone-900 px-3 py-2 text-white">移动</button>
-              <button onClick={onBulkDeleteNotes} className="rounded-2xl bg-rose-600 px-3 py-2 text-white">删除</button>
-              <button onClick={onClearSelection} className="rounded-2xl border border-stone-200 px-3 py-2 text-stone-600">清空</button>
+          {/* Search Bar - Extremely Minimal */}
+          <div className="px-2">
+            <div className="flex items-center gap-2 bg-reflect-border/20 px-2 py-1.5 rounded-md focus-within:bg-reflect-border/30 transition-all">
+              <Search size={13} className="text-reflect-muted opacity-50" />
+              <input 
+                value={query} 
+                onChange={(event) => setQuery(event.target.value)} 
+                className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-reflect-muted/40" 
+                placeholder="搜索..." 
+              />
+              {query && <X size={11} className="cursor-pointer text-reflect-muted hover:text-reflect-text" onClick={() => setQuery('')} />}
             </div>
           </div>
-        )}
 
-        {showNotebookCreator && (
-          <div className="mb-3 rounded-[20px] border border-stone-200 bg-white p-3 shadow-sm">
-            <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-stone-400">新建笔记本</div>
-            <input value={newNotebookName} onChange={(event) => setNewNotebookName(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" placeholder="输入笔记本名称" />
-            <div className="mt-3 flex justify-end gap-2">
-              <button onClick={() => { setShowNotebookCreator(false); setNewNotebookName(''); }} className="rounded-2xl border border-stone-200 px-3 py-2 text-sm text-stone-600">取消</button>
-              <button onClick={() => { if (!newNotebookName.trim()) return; onCreateNotebook(newNotebookName.trim()); setNewNotebookName(''); setShowNotebookCreator(false); }} className="rounded-2xl bg-stone-900 px-3 py-2 text-sm text-white">创建</button>
-            </div>
-          </div>
-        )}
-
-        <div className="flex max-h-[470px] flex-col gap-2 overflow-y-auto pr-1">
-          {filteredNotes.length === 0 && <div className="rounded-2xl bg-white/70 px-4 py-4 text-sm text-stone-500">没有匹配的笔记，试试换个关键词或标签。</div>}
-          {notebooks.map((notebook) => {
-            const notebookNotes = rootNotesByNotebook.get(notebook.id) || [];
-            const isCollapsed = collapsed[notebook.id];
-            const notebookEditing = editingNotebookId === notebook.id;
-            return (
-              <div key={notebook.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.stopPropagation(); if (draggingNoteId === null) return; onMoveNote(draggingNoteId, notebook.id, notebookNotes.length, null); setDraggingNoteId(null); }} className="rounded-[18px] border border-stone-200 bg-white p-3">
-                {notebookEditing ? (
-                  <div className="space-y-2 rounded-2xl bg-stone-50 p-3">
-                    {editingNotebookMode === 'rename' ? (
-                      <input value={editingNotebookName} onChange={(event) => setEditingNotebookName(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => notebookIconInputRef.current?.click()} className="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-lg">{isDataIcon(editingNotebookIcon) ? '图片' : editingNotebookIcon}</button>
-                        <input value={isDataIcon(editingNotebookIcon) ? '' : editingNotebookIcon} onChange={(event) => setEditingNotebookIcon(event.target.value || defaultIconFor('notebook'))} className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 text-sm" placeholder="输入 emoji 图标" />
-                        <input ref={notebookIconInputRef} type="file" accept="image/*" className="hidden" onChange={handleNotebookIconPick} />
+          {/* Notebooks List */}
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1 custom-scrollbar">
+            {showNotebookCreator && (
+              <div className="mx-2 mb-2 p-2 bg-white rounded-lg border border-reflect-border shadow-sm">
+                <input 
+                  autoFocus
+                  value={newNotebookName} 
+                  onChange={(e) => setNewNotebookName(e.target.value)} 
+                  placeholder="笔记本名称..."
+                  className="w-full text-[11px] bg-transparent border-none outline-none mb-2"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newNotebookName.trim()) {
+                      onCreateNotebook(newNotebookName.trim());
+                      setNewNotebookName('');
+                      setShowNotebookCreator(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setShowNotebookCreator(false);
+                    }
+                  }}
+                />
+                <div className="flex justify-end gap-1">
+                  <button onClick={() => setShowNotebookCreator(false)} className="text-[10px] px-2 py-1 text-reflect-muted hover:text-reflect-text">取消</button>
+                  <button 
+                    onClick={() => { 
+                      if (newNotebookName.trim()) {
+                        onCreateNotebook(newNotebookName.trim());
+                        setNewNotebookName('');
+                        setShowNotebookCreator(false);
+                      }
+                    }}
+                    className="text-[10px] bg-reflect-text text-white px-2 py-1 rounded"
+                  >
+                    创建
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="space-y-0.5">
+            {notebooks.map((notebook) => {
+              const notebookNotes = rootNotesByNotebook.get(notebook.id) || [];
+              const isCollapsed = collapsed[notebook.id];
+              const notebookEditing = editingNotebookId === notebook.id;
+              
+              return (
+                <div key={notebook.id} className="group flex flex-col">
+                  {notebookEditing ? (
+                    <div className="px-2 py-2 bg-white rounded-lg border border-reflect-border shadow-sm m-1">
+                      <input 
+                        autoFocus
+                        value={editingNotebookName} 
+                        onChange={(event) => setEditingNotebookName(event.target.value)} 
+                        className="w-full text-xs bg-transparent border-none outline-none mb-2"
+                      />
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => setEditingNotebookId(null)} className="text-[10px] px-2 py-1 text-reflect-muted hover:text-reflect-text">取消</button>
+                        <button 
+                          onClick={() => { onUpdateNotebook(notebook.id, { name: editingNotebookName }); setEditingNotebookId(null); }}
+                          className="text-[10px] bg-reflect-text text-white px-2 py-1 rounded"
+                        >
+                          保存
+                        </button>
                       </div>
-                    )}
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setEditingNotebookId(null)} className="rounded-2xl border border-stone-200 px-3 py-2 text-sm text-stone-600">取消</button>
-                      <button onClick={() => { onUpdateNotebook(notebook.id, editingNotebookMode === 'rename' ? { name: editingNotebookName } : { icon: editingNotebookIcon }); setEditingNotebookId(null); }} className="rounded-2xl bg-stone-900 px-3 py-2 text-sm text-white">保存</button>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-2">
-                      <button onClick={() => setCollapsed((value) => ({ ...value, [notebook.id]: !value[notebook.id] }))} className="flex items-center gap-2 text-left text-sm font-medium text-stone-700">
-                        {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                        {renderIcon(notebook.icon, defaultIconFor('notebook'))}
-                        <span>{notebook.name}</span>
-                        <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[11px] text-stone-600">
-                          {notes.filter(n => (n.notebook_id === notebook.id || (!n.notebook_id && notebook.name === '快速笔记')) && !n.deleted_at).length}
-                        </span>
-                      </button>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => onCreateNoteInNotebook(notebook.id, null)} className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">+</button>
-                        <div className="group relative">
-                          <button onClick={() => setActiveNotebookMenuId(activeNotebookMenuId === notebook.id ? null : notebook.id)} className="rounded-full p-1 text-stone-400 opacity-0 transition hover:bg-stone-200 hover:text-stone-700 group-hover:opacity-100">
-                            <MoreHorizontal size={16} />
-                          </button>
-                          {activeNotebookMenuId === notebook.id && notebook.name !== '快速笔记' && (
-                            <div className="absolute right-0 top-8 z-20 w-36 rounded-2xl border border-stone-200 bg-white p-2 shadow-soft">
-                              <button onClick={() => { startNotebookEdit(notebook, 'rename'); setActiveNotebookMenuId(null); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-stone-100">改名</button>
-                              <button onClick={() => { startNotebookEdit(notebook, 'icon'); setActiveNotebookMenuId(null); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-stone-100">改图标</button>
-                              <button onClick={() => { onDeleteNotebook(notebook.id); setActiveNotebookMenuId(null); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">删除</button>
-                            </div>
-                          )}
+                  ) : (
+                    <div 
+                      className={`
+                        relative group flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
+                        ${!isCollapsed && notebookNotes.length > 0 ? 'text-reflect-text font-medium' : 'text-reflect-muted hover:bg-reflect-border/20 hover:text-reflect-text'}
+                      `}
+                      onClick={() => setCollapsed(prev => ({ ...prev, [notebook.id]: !prev[notebook.id] }))}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-3.5 flex items-center justify-center opacity-60">
+                          {notebookNotes.length > 0 ? (isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />) : <div className="w-3.5 h-3.5" />}
                         </div>
+                        <span className="text-[11px] truncate uppercase tracking-wider">{notebook.name}</span>
                       </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button 
+                          onClick={(e) => { e.stopPropagation(); onCreateNoteInNotebook(notebook.id, null); }}
+                          className="p-1 hover:bg-reflect-border/50 rounded"
+                        >
+                          <Plus size={12} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setActiveNotebookMenuId(activeNotebookMenuId === notebook.id ? null : notebook.id); }}
+                          className="p-1 hover:bg-reflect-border/50 rounded"
+                        >
+                          <MoreHorizontal size={12} />
+                        </button>
+                      </div>
+                      {activeNotebookMenuId === notebook.id && (
+                        <div className="absolute right-0 top-full mt-1 z-30 w-32 rounded-lg border border-reflect-border bg-white p-1 shadow-soft-lg">
+                          <button onClick={() => { startNotebookEdit(notebook, 'rename'); setActiveNotebookMenuId(null); }} className="block w-full rounded px-2 py-1 text-left text-[11px] hover:bg-reflect-bg">重命名</button>
+                          <button onClick={() => { onDeleteNotebook(notebook.id); setActiveNotebookMenuId(null); }} className="block w-full rounded px-2 py-1 text-left text-[11px] text-rose-600 hover:bg-rose-50">删除</button>
+                        </div>
+                      )}
                     </div>
-
-                    {!isCollapsed && (
-                      <div className="mt-3 space-y-2">
-                        {notebookNotes.map((note, idx) => renderNoteTree(note, idx, notebook.id, 0))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            );
-          })}
+                  )}
+                  {!isCollapsed && (
+                    <div className="flex flex-col">
+                      {notebookNotes.map((note, idx) => renderNoteTree(note, idx, notebook.id, 0))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
+      )}
 
-      <section>
-        <button onClick={() => setShowTrash((value) => !value)} className="mb-3 flex w-full items-center justify-between text-sm font-medium text-stone-500">
-          <span className="flex items-center gap-2"><Trash2 size={16} /> 垃圾桶</span>
-          {showTrash ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      {/* Footer Actions */}
+      <div className="mt-auto pt-2 space-y-0.5">
+        <div className="h-px bg-reflect-border/30 mx-2 mb-2" />
+        
+        <button 
+          onClick={() => onChangePage('settings')}
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
+            activePage === 'settings' 
+            ? 'bg-reflect-border/50 text-reflect-text' 
+            : 'text-reflect-muted hover:bg-reflect-border/30 hover:text-reflect-text'
+          }`}
+        >
+          <Settings size={15} className="opacity-50" />
+          设置
         </button>
+
+        <button 
+          onClick={() => setShowTrash(!showTrash)}
+          className="w-full flex items-center justify-between gap-2.5 px-2.5 py-1.5 text-[13px] font-medium text-reflect-muted hover:bg-reflect-border/30 hover:text-reflect-text rounded-lg transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <Trash2 size={15} className="opacity-50" />
+            回收站
+          </div>
+          {showTrash ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+
         {showTrash && (
-          <div className="max-h-[220px] space-y-2 overflow-y-auto rounded-2xl bg-white/70 p-3">
-            {trash.notebooks.map((notebook) => (
-              <div key={`notebook-${notebook.id}`} className="rounded-2xl bg-stone-50 px-3 py-3 text-sm">
-                <div className="font-medium text-stone-800">{notebook.name}</div>
-                <div className="mt-2 flex gap-2">
-                  <button onClick={() => onRestoreNotebook(notebook.id)} className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">恢复</button>
-                  <button onClick={() => onPurgeNotebook(notebook.id)} className="rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">永久删除</button>
+          <div className="mx-2 mt-2 p-2 bg-reflect-sidebar/50 rounded-lg border border-reflect-border/50 text-[11px] space-y-2">
+            <div className="flex items-center justify-between px-1 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">笔记</span>
+              {trash.notes.length > 0 && (
+                <button onClick={() => onPurgeTrash()} className="text-rose-600 hover:opacity-70 transition-opacity font-bold">清空全部</button>
+              )}
+            </div>
+            {trash.notes.length === 0 && trash.notebooks.length === 0 && (
+              <div className="text-reflect-muted opacity-50 text-center py-2">空</div>
+            )}
+            {trash.notes.map(note => (
+              <div key={note.id} className="flex items-center justify-between group px-1">
+                <span className="truncate opacity-70 flex-1 mr-2">{note.title}</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => onRestoreNote(note.id)} className="text-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity hover:underline">恢复</button>
+                  <button onClick={() => onPurgeNote(note.id)} className="text-rose-700 opacity-0 group-hover:opacity-100 transition-opacity hover:underline">彻底删除</button>
                 </div>
               </div>
             ))}
-            {trash.notes.map((note) => (
-              <div key={`note-${note.id}`} className="rounded-2xl bg-stone-50 px-3 py-3 text-sm">
-                <div className="font-medium text-stone-800">{note.title}</div>
-                <div className="mt-2 flex gap-2">
-                  <button onClick={() => onRestoreNote(note.id)} className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">恢复</button>
-                  <button onClick={() => onPurgeNote(note.id)} className="rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">永久删除</button>
-                </div>
-              </div>
-            ))}
-            {trash.notes.length === 0 && trash.notebooks.length === 0 && <div className="text-sm text-stone-400">垃圾桶为空。</div>}
           </div>
         )}
-      </section>
-
-      </>
-      )}
+      </div>
     </aside>
   );
 }

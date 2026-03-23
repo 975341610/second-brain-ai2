@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
-import type { AskResponse, ChatMessage, ChatSession, ModelConfig, Note, Notebook, Task, ToastMessage, TrashState } from '../lib/types';
+import type { AskResponse, ChatMessage, ChatSession, ModelConfig, Note, Notebook, Task, ToastMessage, TrashState, Citation } from '../lib/types';
 
 const CHAT_STORAGE_KEY = 'second-brain-chat-sessions';
 
@@ -89,8 +89,11 @@ type AppState = {
   deleteNote: (noteId: number) => Promise<void>;
   restoreNote: (noteId: number) => Promise<void>;
   purgeNote: (noteId: number) => Promise<void>;
+  purgeTrash: () => Promise<void>;
   createTask: (payload: { title: string; priority: Task['priority']; task_type: Task['task_type']; deadline: string | null }) => Promise<void>;
   updateTaskStatus: (taskId: number, status: Task['status']) => Promise<void>;
+  deleteTask: (taskId: number) => Promise<void>;
+  clearCompletedTasks: () => Promise<void>;
   askAssistant: (question: string, mode: 'chat' | 'rag' | 'agent') => Promise<void>;
   askStreamingAssistant: (question: string, mode: 'chat' | 'rag' | 'agent') => Promise<void>;
   uploadFiles: (files: File[]) => Promise<void>;
@@ -321,6 +324,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ toast: { id: Date.now(), tone: 'error', text: `永久删除笔记失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
+  purgeTrash: async () => {
+    try {
+      await api.purgeTrash();
+      const trash = await api.getTrash();
+      set({ trash, toast: { id: Date.now(), tone: 'success', text: '回收站已清空。' } });
+    } catch (error) {
+      set({ toast: { id: Date.now(), tone: 'error', text: `清空回收站失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
+    }
+  },
   createTask: async ({ title, priority, task_type, deadline }) => {
     try {
       await api.createTask({ title, status: 'todo', priority, task_type, deadline });
@@ -340,6 +352,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `更新任务失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
+    }
+  },
+  deleteTask: async (taskId) => {
+    try {
+      await api.deleteTask(taskId);
+      const tasks = await api.listTasks();
+      set({ tasks, toast: { id: Date.now(), tone: 'success', text: '任务已废弃。' } });
+    } catch (error) {
+      set({ toast: { id: Date.now(), tone: 'error', text: `废弃任务失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
+    }
+  },
+  clearCompletedTasks: async () => {
+    try {
+      await api.clearCompletedTasks();
+      const tasks = await api.listTasks();
+      set({ tasks, toast: { id: Date.now(), tone: 'success', text: '已清理完成的任务。' } });
+    } catch (error) {
+      set({ toast: { id: Date.now(), tone: 'error', text: `清理失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
   askAssistant: async (question, mode) => {
@@ -363,6 +393,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   askStreamingAssistant: async (question, mode) => {
+    if (mode === 'agent') {
+      // For agent mode, use the non-streaming logic to handle task creation and structured response
+      return get().askAssistant(question, mode);
+    }
     set({ loading: true });
     try {
       const activeId = get().activeChatSessionId;
@@ -385,14 +419,46 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ chatSessions: sessionsWithUser });
 
       let fullContent = '';
+      let citations: Citation[] = [];
+      let buffer = '';
+      let citationsParsed = false;
+
       await api.streamChat({ question, mode }, (chunk) => {
-        fullContent += chunk;
+        if (!citationsParsed && mode === 'rag') {
+          buffer += chunk;
+          if (buffer.includes('\n')) {
+            const firstLine = buffer.slice(0, buffer.indexOf('\n'));
+            if (firstLine.startsWith('__CITATIONS__:')) {
+              try {
+                const jsonStr = firstLine.replace('__CITATIONS__:', '');
+                citations = JSON.parse(jsonStr);
+                citationsParsed = true;
+                const remaining = buffer.slice(buffer.indexOf('\n') + 1);
+                fullContent = remaining;
+                buffer = ''; // Clear buffer after extraction
+              } catch (e) {
+                console.error('Failed to parse citations', e);
+                fullContent += buffer;
+                citationsParsed = true;
+                buffer = '';
+              }
+            } else {
+              // Not a citation block
+              fullContent += buffer;
+              citationsParsed = true;
+              buffer = '';
+            }
+          }
+        } else {
+          fullContent += chunk;
+        }
+        
         set((state) => ({
           chatSessions: state.chatSessions.map((s) => 
             s.id === activeId 
               ? {
                   ...s,
-                  messages: s.messages.map((m) => m.id === assistantMessageId ? { ...m, content: fullContent } : m)
+                  messages: s.messages.map((m) => m.id === assistantMessageId ? { ...m, content: fullContent, citations: citations.length > 0 ? citations : m.citations } : m)
                 }
               : s
           )
@@ -403,7 +469,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       writeStoredChats(finalSessions, activeId);
       set({ assistant: latestAssistantFromSession(finalSessions.find(s => s.id === activeId)) });
       
-      if (mode === 'agent') {
+      if (mode as string === 'agent') {
         const tasks = await api.listTasks();
         set({ tasks });
       }

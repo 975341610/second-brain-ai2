@@ -4,15 +4,15 @@
 
 :root {
   color-scheme: light;
-  --paper: #f7f1e4;
-  --ink: #2d261c;
+  --reflect-bg: #fcfbf9;
+  --reflect-text: #2d2c2a;
 }
 
 body {
   margin: 0;
-  font-family: "IBM Plex Sans", sans-serif;
-  color: var(--ink);
-  background: var(--paper);
+  font-family: 'Inter', sans-serif;
+  color: var(--reflect-text);
+  background: var(--reflect-bg);
 }
 
 @keyframes purple-gradient-flow {
@@ -491,13 +491,13 @@ textarea {
 }
 
 .notion-editor-layout {
-  background-color: #ffffff;
+  background-color: transparent;
 }
 
 .tiptap-notion {
   max-width: 800px;
   margin: 0 auto;
-  padding: 10px 40px 160px 40px;
+  padding: 0 40px 160px 40px;
   min-height: calc(100vh - 200px);
 }
 

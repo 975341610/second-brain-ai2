@@ -4,7 +4,7 @@ import { getMediaType } from '../../lib/mediaUtils';
 import { api } from '../../lib/api';
 
 export function createVideoHtml(src: string) {
-  return `<video controls class="embedded-video" src="${src}"></video>`;
+  return `<video controls muted class="embedded-video" src="${src}"></video>`;
 }
 
 export function createAudioHtml(src: string) {
@@ -14,32 +14,46 @@ export function createAudioHtml(src: string) {
 export function bilibiliEmbedUrl(url: string) {
   // Support BV and av ids
   const bv = url.match(/\/video\/(BV[\w]+)/i)?.[1] || url.match(/\/(BV[\w]+)/i)?.[1];
-  if (bv) return `https://player.bilibili.com/player.html?bvid=${bv}&page=1`;
-  const av = url.match(/\/video\/av(\d+)/i)?.[1];
-  if (av) return `https://player.bilibili.com/player.html?aid=${av}&page=1`;
+  if (bv) return `https://player.bilibili.com/player.html?bvid=${bv}&page=1&autoplay=0&muted=1&danmaku=0`;
+  const av = url.match(/\/video\/av(\d+)/i)?.[1] || url.match(/\/av(\d+)/i)?.[1];
+  if (av) return `https://player.bilibili.com/player.html?aid=${av}&page=1&autoplay=0&muted=1&danmaku=0`;
   
-  // Also support b23.tv or other shortened urls (needs server resolve usually but we try regex)
-  const b23id = url.match(/b23\.tv\/([\w]+)/i)?.[1];
-  if (b23id) {
-    // We can't resolve it client-side reliably but can try to iframe it if it's the video ID
-    // Often it's not. For now we only support full links
-  }
+  // Also support b23.tv or other shortened urls
+  // If we have a direct BV in the URL but not in standard format
+  const anyBV = url.match(/(BV[\w]{10})/i)?.[1];
+  if (anyBV) return `https://player.bilibili.com/player.html?bvid=${anyBV}&page=1&autoplay=0&muted=1&danmaku=0`;
+
   return '';
 }
 
 export function genericEmbedUrl(url: string) {
   // Simple check for valid url
+  let urlObj: URL;
   try {
-    new URL(url);
+    urlObj = new URL(url);
   } catch(e) {
-    return null;
+    // Try adding https:// if missing
+    try {
+      urlObj = new URL('https://' + url);
+      url = urlObj.toString();
+    } catch(e2) {
+      return null;
+    }
   }
 
-  if (url.includes('youtube.com') || url.includes('youtu.be')) return { kind: 'youtube' as const, src: url };
-  if (url.includes('bilibili.com') || url.includes('b23.tv')) {
+  const host = urlObj.hostname.toLowerCase();
+  
+  if (host.includes('youtube.com') || host.includes('youtu.be')) {
+    return { kind: 'youtube' as const, src: url };
+  }
+  
+  if (host.includes('bilibili.com') || host.includes('b23.tv')) {
     const src = bilibiliEmbedUrl(url);
     return src ? { kind: 'iframe' as const, src } : null;
   }
+
+  // Generic iframe support for common embeddable sites if needed
+  // For now stick to requested ones
   return null;
 }
 

@@ -34,7 +34,7 @@ class AIClient:
             "input": text,
         }
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
                 response = await client.post(f"{base_url}/embeddings", headers=headers, json=payload)
                 response.raise_for_status()
                 body = response.json()
@@ -105,7 +105,13 @@ class AIClient:
         response = await self._chat_completion(prompt, config)
         if response:
             try:
-                data = json.loads(response)
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response[7:-3].strip()
+                elif cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response[3:-3].strip()
+                
+                data = json.loads(cleaned_response)
                 if isinstance(data, list):
                     return [str(item) for item in data][:5]
             except json.JSONDecodeError:
@@ -130,7 +136,7 @@ class AIClient:
             "temperature": 0.2,
         }
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
                 response = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
                 response.raise_for_status()
                 body = response.json()
@@ -157,17 +163,20 @@ class AIClient:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
                 async with client.stream("POST", f"{base_url}/chat/completions", headers=headers, json=payload) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
                         if not line or not line.startswith("data: "):
                             continue
-                        if line == "data: [DONE]":
+                        # Remove 'data: ' prefix
+                        content_str = line[6:].strip()
+                        if content_str == "[DONE]":
                             break
                         try:
-                            data = json.loads(line[6:])
-                            content = data["choices"][0].get("delta", {}).get("content", "")
+                            data = json.loads(content_str)
+                            delta = data.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
                             if content:
                                 yield content
                         except Exception:

@@ -37,7 +37,6 @@ export function EditorHeader(props: EditorHeaderProps) {
   const [tempTitle, setTempTitle] = useState(title);
   const [isFocused, setIsFocused] = useState(false);
 
-  // 当外部标题变化且用户不在编辑时，同步本地标题
   useEffect(() => {
     if (!isFocused) {
       setTempTitle(title);
@@ -58,66 +57,71 @@ export function EditorHeader(props: EditorHeaderProps) {
   };
 
   return (
-    <div className="flex flex-col border-b border-stone-100 bg-white px-8 lg:px-16 xl:px-32 py-1">
-      <div className="flex items-center justify-between mb-0.5">
-        <div className="flex items-center gap-2 overflow-hidden">
+    <div className="flex flex-col bg-transparent px-0 pt-6 pb-2 antialiased">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <div 
+            className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-reflect-muted opacity-40 cursor-default"
+            title={lastSavedAt ? `同步于 ${lastSavedAt}` : undefined}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${savePhase === 'saving' ? 'bg-amber-400 animate-pulse' : isDirty ? 'bg-rose-400' : 'bg-emerald-400 opacity-50'}`} />
+            <span>
+              {savePhase === 'saving' ? '正在保存' : 
+               savePhase === 'queued' ? '已加入队列' : 
+               isDirty ? '未保存' : 
+               '已同步'}
+            </span>
+          </div>
+          
           {breadcrumbs && breadcrumbs.length > 1 && (
-            <div className="flex items-center gap-1 overflow-hidden">
+            <div className="flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
               {breadcrumbs.slice(0, -1).map((bc, idx) => (
                 <div key={bc.id} className="flex items-center gap-1">
-                  <button onClick={() => onSelectBreadcrumb?.(bc.id)} className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-stone-400 hover:bg-stone-50 hover:text-stone-600 transition truncate max-w-[100px]">
-                    <span>{bc.icon}</span>
-                    <span className="truncate">{bc.title}</span>
+                  <button onClick={() => onSelectBreadcrumb?.(bc.id)} className="text-[9px] font-bold uppercase tracking-widest text-reflect-muted hover:text-reflect-accent transition truncate max-w-[80px]">
+                    {bc.title}
                   </button>
-                  <ChevronRight size={10} className="text-stone-300 flex-shrink-0" />
+                  <ChevronRight size={10} className="text-reflect-muted/30" />
                 </div>
               ))}
             </div>
           )}
-          <div 
-            className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-stone-400 cursor-default group/sync"
-            title={lastSavedAt ? `Synced at ${lastSavedAt}` : undefined}
-          >
-            <Clock3 size={10} />
-            <span className="transition-all duration-200">
-              {savePhase === 'saving' ? 'Saving...' : 
-               savePhase === 'queued' ? 'Queued' : 
-               isDirty ? 'Unsaved' : 
-               'Synced'}
-            </span>
-          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={onSave} className="p-1 hover:bg-stone-100 rounded-lg text-stone-500 transition-colors"><Save size={13} /></button>
-          <button onClick={onToggleRelations} className={`p-1 rounded-lg transition-colors ${showRelations ? 'bg-stone-100 text-stone-900' : 'hover:bg-stone-100 text-stone-500'}`}><GitBranchPlus size={13} /></button>
-          <button onMouseEnter={onOutlineEnter} onMouseLeave={onOutlineLeave} className={`p-1 rounded-lg transition-colors ${showOutline ? 'bg-stone-100 text-stone-900' : 'hover:bg-stone-100 text-stone-500'}`}><BookMarked size={13} /></button>
-          <div className="w-[1px] h-3 bg-stone-200 mx-1" />
-          <div className="flex items-center bg-stone-100 rounded-lg p-0.5">
-            <button onClick={() => onSetViewMode('edit')} className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-colors ${viewMode === 'edit' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>Edit</button>
-            <button onClick={() => onSetViewMode('preview')} className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-colors ${viewMode === 'preview' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>Preview</button>
+
+        <div className="flex items-center gap-2">
+           <div className="flex items-center bg-reflect-sidebar/40 rounded-lg p-0.5 border border-reflect-border/30">
+            <button 
+              onClick={() => onSetViewMode('edit')} 
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${viewMode === 'edit' ? 'bg-white text-reflect-text shadow-soft' : 'text-reflect-muted hover:text-reflect-text'}`}
+            >
+              编辑
+            </button>
+            <button 
+              onClick={() => onSetViewMode('preview')} 
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${viewMode === 'preview' ? 'bg-white text-reflect-text shadow-soft' : 'text-reflect-muted hover:text-reflect-text'}`}
+            >
+              预览
+            </button>
           </div>
+          <button onClick={onSave} className="p-2 hover:bg-reflect-sidebar/60 rounded-full text-reflect-muted hover:text-reflect-text transition-colors"><Save size={14} /></button>
+          <button onMouseEnter={onOutlineEnter} onMouseLeave={onOutlineLeave} className={`p-2 rounded-full transition-colors ${showOutline ? 'bg-reflect-sidebar text-reflect-text' : 'hover:bg-reflect-sidebar/60 text-reflect-muted'}`}><BookMarked size={14} /></button>
         </div>
       </div>
       
-      <div className="flex items-center gap-3">
-        <div className="group relative flex items-center justify-center w-8 h-8 rounded-lg hover:bg-stone-100 transition-colors cursor-pointer text-xl">
-          {icon}
+      <div className="flex items-baseline gap-4">
+        <div className="text-3xl opacity-80 select-none grayscale hover:grayscale-0 transition-all cursor-pointer">
+          {icon || '📄'}
         </div>
-        <div className="flex flex-col flex-1 min-w-0">
-          <input
-            className="text-lg font-bold tracking-tight text-stone-900 outline-none truncate leading-tight bg-transparent hover:bg-stone-50 focus:bg-white rounded transition-colors px-1 -ml-1 w-full"
-            value={tempTitle}
-            onChange={handleTitleChange}
-            onFocus={() => {
-              setIsFocused(true);
-              onUpdateTitle(tempTitle, true);
-            }}
-            onBlur={handleTitleBlur}
-            placeholder="未命名笔记"
-          />
-          
-          {/* Compact Collapsible Tags removed as they are now in PropertyPanel */}
-        </div>
+        <input
+          className="flex-1 font-serif text-4xl italic font-medium text-reflect-text outline-none bg-transparent placeholder:text-reflect-muted/20"
+          value={tempTitle}
+          onChange={handleTitleChange}
+          onFocus={() => {
+            setIsFocused(true);
+            onUpdateTitle(tempTitle, true);
+          }}
+          onBlur={handleTitleBlur}
+          placeholder="新记录..."
+        />
       </div>
     </div>
   );

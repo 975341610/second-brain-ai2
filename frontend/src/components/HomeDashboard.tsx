@@ -1,4 +1,4 @@
-import { Clock3, Filter, ListTodo, Plus } from 'lucide-react';
+import { ChevronRight, Clock3, Filter, ListTodo, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AssistantPanel } from './AssistantPanel';
 import type { AskResponse, ChatSession, ModelConfig, Note, Task } from '../lib/types';
@@ -14,6 +14,8 @@ type HomeDashboardProps = {
   onAsk: (question: string, mode: 'chat' | 'rag' | 'agent') => Promise<void>;
   onCreateTask: (payload: { title: string; priority: Task['priority']; task_type: Task['task_type']; deadline: string | null }) => Promise<void>;
   onUpdateTaskStatus: (taskId: number, status: Task['status']) => Promise<void>;
+  onDeleteTask: (taskId: number) => Promise<void>;
+  onClearCompleted: () => Promise<void>;
   onStartNewChat: () => void;
   onSwitchSession: (sessionId: string) => void;
   onClearSession: () => void;
@@ -24,7 +26,11 @@ type HomeDashboardProps = {
 const typeLabels: Record<Task['task_type'], string> = { meeting: '会议', work: '工作任务', travel: '出行', errand: '办事', study: '学习', personal: '个人' };
 const priorityLabels: Record<Task['priority'], string> = { low: '低', medium: '中', high: '高' };
 
-export function HomeDashboard({ recentNotes, tasks, assistant, modelConfig, sessions, activeSessionId, onSelectNote, onAsk, onCreateTask, onUpdateTaskStatus, onStartNewChat, onSwitchSession, onClearSession, onRenameSession, onDeleteSession }: HomeDashboardProps) {
+export function HomeDashboard({ 
+  recentNotes, tasks, assistant, modelConfig, sessions, activeSessionId, 
+  onSelectNote, onAsk, onCreateTask, onUpdateTaskStatus, onDeleteTask, onClearCompleted, 
+  onStartNewChat, onSwitchSession, onClearSession, onRenameSession, onDeleteSession 
+}: HomeDashboardProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [title, setTitle] = useState('');
@@ -35,66 +41,151 @@ export function HomeDashboard({ recentNotes, tasks, assistant, modelConfig, sess
   const visibleTasks = useMemo(() => tasks.filter((task) => filterStatus === 'all' || task.status === filterStatus), [tasks, filterStatus]);
 
   return (
-    <section className="grid gap-4">
-      <div className="rounded-[28px] border border-white/50 bg-[rgba(255,252,247,0.88)] p-6 shadow-soft backdrop-blur">
-        <div className="mb-4 flex items-center gap-2 text-sm font-medium text-stone-500"><Clock3 size={16} /> 最近访问的笔记</div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {recentNotes.map((note) => (
-            <button key={note.id} onClick={() => onSelectNote(note.id)} className="rounded-[24px] bg-white/80 p-4 text-left">
-              <div className="text-sm font-medium text-stone-800">{note.icon} {note.title}</div>
-              <div className="mt-2 text-xs text-stone-400">最近编辑</div>
+    <section className="grid gap-8 max-w-5xl mx-auto py-4 antialiased text-reflect-text">
+      {/* Welcome Header */}
+      <header className="px-2">
+        <h1 className="font-serif text-3xl italic font-medium">早上好，Reflect。</h1>
+        <p className="mt-2 text-sm text-reflect-muted font-sans tracking-tight">今天是 {new Date().toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+      </header>
+
+      {/* Recent Notes Section */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 px-2 text-[10px] uppercase tracking-widest text-reflect-muted font-bold opacity-60">
+          <Clock3 size={12} /> 最近记录
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {recentNotes.slice(0, 3).map((note) => (
+            <button 
+              key={note.id} 
+              onClick={() => onSelectNote(note.id)} 
+              className="group relative h-40 rounded-2xl border border-reflect-border/50 bg-white p-6 text-left transition-all hover:border-reflect-accent/30 hover:shadow-soft"
+            >
+              <div className="text-2xl mb-3 opacity-80 group-hover:opacity-100 transition-opacity">{note.icon || '📝'}</div>
+              <div className="text-sm font-semibold text-reflect-text leading-tight mb-1">{note.title}</div>
+              <div className="text-[10px] text-reflect-muted line-clamp-2 leading-relaxed opacity-70">
+                {note.summary || "暂无记录摘要。"}
+              </div>
+              <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-40 transition-opacity">
+                 <Plus size={14} />
+              </div>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="rounded-[28px] border border-white/50 bg-[rgba(255,252,247,0.88)] p-6 shadow-soft backdrop-blur">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-stone-500"><ListTodo size={16} /> 待办和任务看板</div>
+      {/* Tasks & Board Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-reflect-muted font-bold opacity-60">
+            <ListTodo size={12} /> 任务看板
+          </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowCreate((value) => !value)} className="rounded-2xl bg-stone-900 px-4 py-2 text-sm font-medium text-white"><span className="flex items-center gap-2"><Plus size={14} /> 添加</span></button>
-            <button onClick={() => setShowFilter((value) => !value)} className="rounded-2xl border border-stone-200 bg-white px-4 py-2 text-sm text-stone-700"><span className="flex items-center gap-2"><Filter size={14} /> 筛选</span></button>
+            <button 
+              onClick={() => setShowCreate(!showCreate)} 
+              className="text-[10px] uppercase tracking-widest font-bold text-reflect-accent hover:opacity-70 transition-opacity"
+            >
+              添加任务
+            </button>
           </div>
         </div>
 
         {showCreate && (
-          <div className="mb-4 grid gap-2 rounded-[24px] bg-white/85 p-4 md:grid-cols-4">
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-2xl border border-stone-200 px-3 py-2 text-sm" placeholder="任务标题" />
-            <select value={priority} onChange={(event) => setPriority(event.target.value as Task['priority'])} className="rounded-2xl border border-stone-200 px-3 py-2 text-sm">
-              {Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}优先级</option>)}
-            </select>
-            <select value={taskType} onChange={(event) => setTaskType(event.target.value as Task['task_type'])} className="rounded-2xl border border-stone-200 px-3 py-2 text-sm">
-              {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-            <div className="flex gap-2">
-              <input value={deadline} onChange={(event) => setDeadline(event.target.value)} type="datetime-local" className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm" />
-              <button onClick={async () => { if (!title.trim()) return; await onCreateTask({ title: title.trim(), priority, task_type: taskType, deadline: deadline || null }); setTitle(''); setDeadline(''); setPriority('medium'); setTaskType('work'); setShowCreate(false); }} className="rounded-2xl bg-emerald-700 px-4 py-2 text-sm text-white">保存</button>
+          <div className="mx-2 p-4 bg-white border border-reflect-border/50 rounded-2xl shadow-soft animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="grid gap-4 md:grid-cols-4">
+              <input 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                placeholder="任务标题..." 
+                className="col-span-1 md:col-span-2 bg-reflect-bg border-none rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-reflect-accent outline-none transition-all"
+              />
+              <select 
+                value={priority} 
+                onChange={(e) => setPriority(e.target.value as Task['priority'])}
+                className="bg-reflect-bg border-none rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-reflect-accent outline-none appearance-none"
+              >
+                <option value="high">高优先级</option>
+                <option value="medium">中优先级</option>
+                <option value="low">低优先级</option>
+              </select>
+              <select 
+                value={taskType} 
+                onChange={(e) => setTaskType(e.target.value as Task['task_type'])}
+                className="bg-reflect-bg border-none rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-reflect-accent outline-none appearance-none"
+              >
+                {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <input 
+                type="datetime-local"
+                value={deadline} 
+                onChange={(e) => setDeadline(e.target.value)}
+                className="bg-reflect-bg border-none rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-reflect-accent outline-none"
+              />
+              <div className="md:col-start-4 flex gap-2">
+                <button 
+                  onClick={() => setShowCreate(false)}
+                  className="flex-1 px-4 py-2 rounded-xl text-xs font-bold text-reflect-muted hover:bg-reflect-bg transition-colors"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (!title.trim()) return;
+                    await onCreateTask({ title: title.trim(), priority, task_type: taskType, deadline: deadline || null });
+                    setTitle('');
+                    setDeadline('');
+                    setShowCreate(false);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-xl text-xs font-bold bg-reflect-text text-white hover:opacity-90 transition-all active:scale-95"
+                >
+                  创建任务
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {showFilter && (
-          <div className="mb-4 flex gap-2 rounded-[24px] bg-white/85 p-4 text-sm">
-            {['all', 'todo', 'doing', 'done'].map((status) => (
-              <button key={status} onClick={() => setFilterStatus(status as 'all' | Task['status'])} className={`rounded-full px-3 py-2 ${filterStatus === status ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'}`}>
-                {status === 'all' ? '全部' : status}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="grid max-h-[420px] gap-3 overflow-hidden md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-3">
           {['todo', 'doing', 'done'].map((status) => (
-            <div key={status} className="flex min-h-0 flex-col rounded-[24px] bg-white/85 p-4">
-              <div className="mb-3 text-xs uppercase tracking-[0.25em] text-stone-400">{status}</div>
-              <div className="space-y-2 overflow-y-auto pr-1">
+            <div key={status} className="flex flex-col min-h-0 bg-reflect-sidebar/30 rounded-2xl p-4 border border-reflect-border/30">
+              <div className="mb-4 flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-reflect-muted opacity-50">{status}</span>
+                <div className="flex items-center gap-2">
+                  {status === 'done' && visibleTasks.filter(t => t.status === 'done').length > 0 && (
+                    <button 
+                      onClick={() => onClearCompleted()} 
+                      className="text-[9px] font-bold text-rose-500/60 hover:text-rose-600 transition-colors uppercase tracking-widest"
+                      title="清除所有已完成任务"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <span className="text-[10px] text-reflect-muted font-mono">{visibleTasks.filter(t => t.status === status).length}</span>
+                </div>
+              </div>
+              <div className="space-y-3 overflow-y-auto pr-1 max-h-[300px] custom-scrollbar">
                 {visibleTasks.filter((task) => task.status === status).map((task) => (
-                  <div key={task.id} className="rounded-2xl bg-stone-50 px-3 py-3">
-                    <div className="text-sm font-medium text-stone-800">{task.title}</div>
-                    <div className="mt-1 text-xs text-stone-500">{priorityLabels[task.priority]} · {typeLabels[task.task_type]}{task.deadline ? ` · ${new Date(task.deadline).toLocaleDateString('zh-CN')}` : ''}</div>
-                    <div className="mt-3 flex gap-2 text-xs">
+                  <div key={task.id} className="group rounded-xl bg-white p-4 border border-reflect-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all hover:shadow-soft relative">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-medium text-reflect-text leading-snug">{task.title}</div>
+                      <button 
+                        onClick={() => onDeleteTask(task.id)} 
+                        className="text-reflect-muted hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all active:scale-90"
+                        title="废弃任务"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                       <span className={`w-1 h-1 rounded-full ${task.priority === 'high' ? 'bg-rose-400' : task.priority === 'medium' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                       <span className="text-[10px] text-reflect-muted opacity-60">{typeLabels[task.task_type]}</span>
+                    </div>
+                    <div className="mt-4 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       {(['todo', 'doing', 'done'] as Task['status'][]).map((nextStatus) => (
-                        <button key={nextStatus} onClick={() => onUpdateTaskStatus(task.id, nextStatus)} className={`rounded-full px-2 py-1 ${task.status === nextStatus ? 'bg-stone-900 text-white' : 'bg-white text-stone-500'}`}>
+                        <button 
+                          key={nextStatus} 
+                          onClick={() => onUpdateTaskStatus(task.id, nextStatus)} 
+                          className={`text-[9px] px-2 py-0.5 rounded-full transition-colors ${task.status === nextStatus ? 'bg-reflect-text text-white' : 'bg-reflect-bg text-reflect-muted hover:bg-reflect-border/50'}`}
+                        >
                           {nextStatus}
                         </button>
                       ))}
@@ -107,15 +198,31 @@ export function HomeDashboard({ recentNotes, tasks, assistant, modelConfig, sess
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <AssistantPanel assistant={assistant} modelConfig={modelConfig} loading={false} sessions={sessions} activeSessionId={activeSessionId} onAsk={onAsk} onStartNewChat={onStartNewChat} onSwitchSession={onSwitchSession} onClearSession={onClearSession} onRenameSession={onRenameSession} onDeleteSession={onDeleteSession} onUpdateModelConfig={async () => {}} />
-        <div className="rounded-[28px] border border-white/50 bg-[rgba(255,252,247,0.88)] p-6 shadow-soft backdrop-blur">
-          <div className="mb-4 text-sm font-medium text-stone-500">知识卡片</div>
+      {/* AI & Insights Section */}
+      <div className="grid gap-8 lg:grid-cols-[1.4fr_0.6fr]">
+        <div className="space-y-4">
+           <div className="flex items-center gap-2 px-2 text-[10px] uppercase tracking-widest text-reflect-muted font-bold opacity-60">
+            智能助手
+          </div>
+          <div className="rounded-2xl border border-reflect-border/50 bg-white p-6 overflow-hidden min-h-[400px]">
+             <AssistantPanel assistant={assistant} modelConfig={modelConfig} loading={false} sessions={sessions} activeSessionId={activeSessionId} isEmbedded={true} onAsk={onAsk} onStartNewChat={onStartNewChat} onSwitchSession={onSwitchSession} onClearSession={onClearSession} onRenameSession={onRenameSession} onDeleteSession={onDeleteSession} onUpdateModelConfig={async () => {}} />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+           <div className="flex items-center gap-2 px-2 text-[10px] uppercase tracking-widest text-reflect-muted font-bold opacity-60">
+            收藏
+          </div>
           <div className="space-y-3">
             {recentNotes.slice(0, 5).map((note) => (
-              <button key={note.id} onClick={() => onSelectNote(note.id)} className="block w-full rounded-[24px] bg-white/85 p-4 text-left">
-                <div className="text-sm font-medium text-stone-800">{note.icon} {note.title}</div>
-                <div className="mt-2 text-xs text-stone-400">知识卡片</div>
+              <button 
+                key={note.id} 
+                onClick={() => onSelectNote(note.id)} 
+                className="group flex items-center gap-3 w-full rounded-xl bg-white p-3 border border-reflect-border/40 transition-all hover:bg-reflect-sidebar/40"
+              >
+                <span className="text-sm opacity-70 group-hover:opacity-100">{note.icon || '📄'}</span>
+                <span className="text-xs font-medium text-reflect-text truncate flex-1 text-left">{note.title}</span>
+                <ChevronRight size={12} className="text-reflect-muted opacity-0 group-hover:opacity-40 transition-opacity" />
               </button>
             ))}
           </div>

@@ -220,7 +220,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     TableRow,
     DatabaseTableHeader,
     DatabaseTableCell,
-    Youtube.configure({ controls: true, nocookie: true }),
+    Youtube.configure({ controls: true, nocookie: true, autoplay: false }),
     AudioNode,
     VideoNode,
     EmbedNode,
@@ -292,7 +292,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         return false;
       },
       attributes: {
-        class: 'tiptap-notion tiptap-editor prose prose-stone focus:outline-none min-h-[500px] w-full max-w-[800px] mx-auto pt-0 px-8 mb-32'
+        class: 'tiptap-notion tiptap-editor prose prose-reflect focus:outline-none min-h-[500px] w-full max-w-[800px] mx-auto pt-0 px-8 mb-32 font-serif text-reflect-text selection:bg-reflect-accent/10'
       }
     }
   }, [note?.id]);
@@ -430,64 +430,65 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   }, [editor, note, onSave, isSaving]);
 
   return (
-    <div ref={editorContainerRef} className="relative flex flex-col h-full bg-white overflow-hidden notion-editor-layout">
-      <EditorHeader
-        icon={note?.icon ?? '📝'}
-        title={note?.title ?? '未命名笔记'}
-        isTitleManuallyEdited={note?.is_title_manually_edited ?? false}
-        breadcrumbs={[]}
-        onSelectBreadcrumb={onSelectNote}
-        savePhase={isSaving ? 'saving' : 'idle'}
-        isDirty={false}
-        lastSavedAt={lastSavedAt}
-        showRelations={false}
-        showOutline={false}
-        viewMode={viewMode}
-        onSave={() => {
-          if (editor && note) {
-            let content = editor.getHTML();
-            if (content.includes('src="blob:')) {
-              const doc = new DOMParser().parseFromString(content, 'text/html');
-              doc.querySelectorAll('[src^="blob:"]').forEach(el => el.setAttribute('src', ''));
-              content = doc.body.innerHTML;
-            }
-            onSave({ 
-              id: note.id, 
-              content: content, 
-              title: note.title, 
-              icon: note.icon,
-              is_title_manually_edited: note.is_title_manually_edited
-            });
-          }
-        }}
-        onUpdateTitle={(newTitle, isManual) => {
-          if (note) {
-            onSave({ 
-              ...note, 
-              title: newTitle, 
-              is_title_manually_edited: isManual, 
-              silent: true 
-            });
-          }
-        }}
-        onToggleRelations={() => {}}
-        onOutlineEnter={() => {}}
-        onOutlineLeave={() => {}}
-        onSetViewMode={setViewMode}
-      />
-
-      <div className="flex-1 overflow-y-auto relative bg-white scrollbar-hide">
-        {note && (
-          <div className="max-w-[800px] mx-auto pt-0 px-8 pb-0">
-            <PropertyPanel 
-              note={note} 
-              onUpdate={(updated) => onSave({ ...updated, silent: true })} 
-              onUpdateTags={onUpdateTags}
+    <div ref={editorContainerRef} className="relative flex flex-col h-full bg-reflect-bg overflow-hidden notion-editor-layout">
+      <div className="flex-1 overflow-y-auto relative bg-reflect-bg scrollbar-hide pt-0">
+        <div className="flex flex-col w-full max-w-[800px] mx-auto">
+          <div className="px-8">
+            <EditorHeader
+              icon={note?.icon ?? '📝'}
+              title={note?.title ?? '未命名笔记'}
+              isTitleManuallyEdited={note?.is_title_manually_edited ?? false}
+              breadcrumbs={[]}
+              onSelectBreadcrumb={onSelectNote}
+              savePhase={isSaving ? 'saving' : 'idle'}
+              isDirty={false}
+              lastSavedAt={lastSavedAt}
+              showRelations={false}
+              showOutline={false}
+              viewMode={viewMode}
+              onSave={() => {
+                if (editor && note) {
+                  let content = editor.getHTML();
+                  if (content.includes('src="blob:')) {
+                    const doc = new DOMParser().parseFromString(content, 'text/html');
+                    doc.querySelectorAll('[src^="blob:"]').forEach(el => el.setAttribute('src', ''));
+                    content = doc.body.innerHTML;
+                  }
+                  onSave({ 
+                    id: note.id, 
+                    content: content, 
+                    title: note.title, 
+                    icon: note.icon,
+                    is_title_manually_edited: note.is_title_manually_edited
+                  });
+                }
+              }}
+              onUpdateTitle={(newTitle, isManual) => {
+                if (note) {
+                  onSave({ 
+                    ...note, 
+                    title: newTitle, 
+                    is_title_manually_edited: isManual, 
+                    silent: true 
+                  });
+                }
+              }}
+              onToggleRelations={() => {}}
+              onOutlineEnter={() => {}}
+              onOutlineLeave={() => {}}
+              onSetViewMode={setViewMode}
             />
+
+            {note && (
+              <PropertyPanel 
+                note={note} 
+                onUpdate={(updated) => onSave({ ...updated, silent: true })} 
+                onUpdateTags={onUpdateTags}
+              />
+            )}
           </div>
-        )}
-        
-        <div className="relative group/editor">
+
+          <div className="relative group/editor mt-0 w-full">
           {editor && activeTableRect && createPortal(
             <div 
               className="table-controls-container fixed z-[9999] pointer-events-none"
@@ -793,8 +794,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
           <EditorContent editor={editor} className="relative z-0" />
         </div>
+      </div>
         
-        {/* Floating AI Loading Indicator */}
+      {/* Floating AI Loading Indicator */}
         {isAIStreaming && (
           <div className="fixed bottom-12 right-12 z-50 flex items-center gap-3 rounded-full bg-stone-900 px-6 py-3 text-white shadow-2xl animate-pulse">
             <Sparkles size={16} className="text-purple-400 animate-spin" />

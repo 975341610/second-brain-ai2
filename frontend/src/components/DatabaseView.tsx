@@ -92,97 +92,98 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   }, [sortedNotes]);
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-reflect-bg antialiased">
       {/* 工具栏 */}
-      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-4">
-          <div className="flex bg-gray-100 p-1 rounded-lg">
+      <div className="flex items-center justify-between px-10 py-6 border-b border-reflect-border/20">
+        <div className="flex items-center gap-6">
+          <div className="flex bg-reflect-sidebar/40 p-0.5 rounded-lg border border-reflect-border/30">
             <button 
               onClick={() => setView('table')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all ${view === 'table' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${view === 'table' ? 'bg-white shadow-soft text-reflect-text' : 'text-reflect-muted hover:text-reflect-text'}`}
             >
-              <TableIcon size={14} />
-              表格
+              <TableIcon size={12} />
+              List
             </button>
             <button 
               onClick={() => setView('kanban')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all ${view === 'kanban' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${view === 'kanban' ? 'bg-white shadow-soft text-reflect-text' : 'text-reflect-muted hover:text-reflect-text'}`}
             >
-              <KanbanIcon size={14} />
-              看板
+              <KanbanIcon size={12} />
+              Board
             </button>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-reflect-muted/30 group-focus-within:text-reflect-accent transition-colors" size={13} />
             <input 
               type="text"
-              placeholder="搜索数据库..."
+              placeholder="Search database..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-1.5 bg-gray-50 border-none rounded-lg text-sm focus:ring-1 focus:ring-gray-200 w-64"
+              className="pl-9 pr-4 py-2 bg-reflect-sidebar/20 border-none rounded-xl text-xs text-reflect-text focus:ring-1 focus:ring-reflect-border/40 w-72 placeholder:text-reflect-muted/30 transition-all"
             />
           </div>
         </div>
         <button 
           onClick={onCreateNote}
-          className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-medium hover:bg-stone-800 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-5 py-2.5 bg-reflect-accent text-white rounded-xl text-[11px] font-bold uppercase tracking-widest hover:brightness-110 transition-all shadow-soft"
         >
-          <Plus size={16} />
-          新建笔记
+          <Plus size={14} strokeWidth={3} />
+          New Entry
         </button>
       </div>
 
       {/* 视图内容 */}
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-10">
         {view === 'table' ? (
           <div className="inline-block min-w-full align-middle">
-            <table className="min-w-full divide-y divide-gray-200 border-separate border-spacing-0 border rounded-xl overflow-hidden shadow-sm">
-              <thead className="bg-gray-50/50">
+            <table className="min-w-full border-separate border-spacing-y-2">
+              <thead>
                 <tr>
                   <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    className="px-6 py-4 text-left text-[9px] font-bold text-reflect-muted/40 uppercase tracking-[0.2em] cursor-pointer hover:text-reflect-muted"
                     onClick={() => handleSort('title')}
                   >
                     <div className="flex items-center gap-2">
-                      名称
-                      {sortConfig?.key === 'title' && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                      Title
+                      {sortConfig?.key === 'title' && (sortConfig.direction === 'asc' ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                     </div>
                   </th>
                   {allPropertyNames.map(name => (
                     <th 
                       key={name}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      className="px-6 py-4 text-left text-[9px] font-bold text-reflect-muted/40 uppercase tracking-[0.2em] cursor-pointer hover:text-reflect-muted"
                       onClick={() => handleSort(name)}
                     >
                       <div className="flex items-center gap-2">
                         {name}
-                        {sortConfig?.key === name && (sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                        {sortConfig?.key === name && (sortConfig.direction === 'asc' ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
                       </div>
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
+              <tbody className="space-y-4">
                 {sortedNotes.map((note) => (
-                  <tr key={note.id} className="hover:bg-gray-50/80 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <button onClick={() => onSelectNote(note.id)} className="flex items-center gap-2 hover:text-stone-600">
-                        <span>{note.icon}</span>
-                        <span>{note.title}</span>
+                  <tr key={note.id} className="group hover:bg-white/40 transition-all">
+                    <td className="px-6 py-4 whitespace-nowrap bg-white/40 group-hover:bg-white border-y border-l border-reflect-border/20 rounded-l-2xl shadow-sm transition-all">
+                      <button onClick={() => onSelectNote(note.id)} className="flex items-center gap-3">
+                        <span className="text-xl grayscale group-hover:grayscale-0 transition-all">{note.icon}</span>
+                        <span className="font-serif text-base italic font-medium text-reflect-text">{note.title}</span>
                       </button>
                     </td>
-                    {allPropertyNames.map(name => {
+                    {allPropertyNames.map((name, idx) => {
                       const prop = note.properties.find(p => p.name === name);
+                      const isLast = idx === allPropertyNames.length - 1;
                       return (
-                        <td key={name} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td key={name} className={`px-6 py-4 whitespace-nowrap bg-white/40 group-hover:bg-white border-y border-reflect-border/20 shadow-sm transition-all ${isLast ? 'border-r rounded-r-2xl' : ''}`}>
                           {prop ? (
                             <input 
                               type="text"
                               value={prop.value}
                               onChange={(e) => onUpdateNoteProperty(note.id, prop.id, e.target.value)}
-                              className="bg-transparent border-none focus:ring-0 p-0 w-full"
+                              className="bg-transparent border-none focus:ring-0 p-0 w-full text-xs font-medium text-reflect-text/70"
                             />
-                          ) : '-'}
+                          ) : <span className="text-reflect-muted/20">-</span>}
                         </td>
                       );
                     })}
@@ -192,37 +193,33 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
             </table>
           </div>
         ) : (
-          <div className="flex gap-6 h-full overflow-x-auto pb-4">
+          <div className="flex gap-8 h-full overflow-x-auto pb-6">
             {Object.entries(kanbanGroups).map(([status, notes]) => (
-              <div key={status} className="flex-shrink-0 w-72 flex flex-col gap-4">
-                <div className="flex items-center justify-between px-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      status === '已完成' ? 'bg-green-100 text-green-700' :
-                      status === '进行中' ? 'bg-blue-100 text-blue-700' :
-                      status === '未开始' ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+              <div key={status} className="flex-shrink-0 w-80 flex flex-col gap-6">
+                <div className="flex items-center justify-between px-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-reflect-muted">
                       {status}
                     </span>
-                    <span className="text-xs text-gray-400 font-medium">{notes.length}</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-reflect-sidebar/50 text-reflect-muted rounded-full font-bold">{notes.length}</span>
                   </div>
                 </div>
-                <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-2">
+                <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-3 scrollbar-hide">
                   {notes.map(note => (
                     <div 
                       key={note.id}
                       onClick={() => onSelectNote(note.id)}
-                      className="p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md hover:border-gray-200 cursor-pointer transition-all"
+                      className="p-5 bg-white border border-reflect-border/30 rounded-2xl shadow-soft hover:shadow-hover hover:-translate-y-0.5 cursor-pointer transition-all group"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-lg">{note.icon}</span>
-                        <h4 className="text-sm font-medium text-gray-900 truncate">{note.title}</h4>
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="text-xl grayscale group-hover:grayscale-0 transition-all">{note.icon}</span>
+                        <h4 className="font-serif text-base italic font-medium text-reflect-text truncate">{note.title}</h4>
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {note.properties.filter(p => p.name.toLowerCase() !== 'status' && p.name !== '状态').slice(0, 3).map(p => (
-                          <div key={p.id} className="flex items-center gap-2 text-[11px]">
-                            <span className="text-gray-400">{p.name}:</span>
-                            <span className="text-gray-600 truncate">{p.value}</span>
+                          <div key={p.id} className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-reflect-muted/40 shrink-0">{p.name}:</span>
+                            <span className="text-[11px] font-medium text-reflect-text/60 truncate">{p.value}</span>
                           </div>
                         ))}
                       </div>
@@ -230,10 +227,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                   ))}
                   <button 
                     onClick={onCreateNote}
-                    className="flex items-center gap-2 w-full p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg text-sm transition-colors"
+                    className="flex items-center gap-2 w-full p-4 text-[10px] font-bold uppercase tracking-widest text-reflect-muted/40 hover:text-reflect-accent hover:bg-white/40 border border-dashed border-reflect-border/50 rounded-2xl transition-all"
                   >
-                    <Plus size={14} />
-                    <span>新建</span>
+                    <Plus size={12} />
+                    <span>Create new</span>
                   </button>
                 </div>
               </div>

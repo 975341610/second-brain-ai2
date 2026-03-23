@@ -233,7 +233,16 @@ export const EmbedNode = Node.create({
     return [{ tag: 'iframe[data-embed]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    return ['iframe', { ...HTMLAttributes, 'data-embed': 'true', class: 'embedded-iframe', style: `width:${HTMLAttributes.width || '100%'};`, allowfullscreen: 'true' }];
+    return [
+      'iframe', 
+      { 
+        ...HTMLAttributes, 
+        'data-embed': 'true', 
+        class: 'embedded-iframe', 
+        style: `width:${HTMLAttributes.width || '100%'};`, 
+        allowfullscreen: 'true',
+      }
+    ];
   },
   addNodeView() {
     return ReactNodeViewRenderer((props) => React.createElement(MediaNodeView, { ...props, kind: 'embed' }));

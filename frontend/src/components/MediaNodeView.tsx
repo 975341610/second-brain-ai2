@@ -17,7 +17,7 @@ export function MediaNodeView({ node, updateAttributes, deleteNode, selected, ki
 
   const content = useMemo(() => {
     if (kind === 'image') return <img src={src} alt="" className="media-node-inner" draggable={false} />;
-    if (kind === 'video') return <video src={src} controls className="media-node-inner" />;
+    if (kind === 'video') return <video src={src} controls muted playsInline className="media-node-inner" />;
     if (kind === 'audio') return <audio src={src} controls className="media-node-audio" />;
     if (kind === 'file') {
       const { name, size, type } = node.attrs;
@@ -44,7 +44,24 @@ export function MediaNodeView({ node, updateAttributes, deleteNode, selected, ki
         </div>
       );
     }
-    return <iframe src={src} className="media-node-inner" allowFullScreen height={height} />;
+    
+    // For iframes (kind === 'embed')
+    let finalSrc = src;
+    if (!finalSrc.includes('autoplay=')) {
+      finalSrc += (finalSrc.includes('?') ? '&' : '?') + 'autoplay=0';
+    }
+    if (!finalSrc.includes('muted=') && !finalSrc.includes('mute=')) {
+      finalSrc += (finalSrc.includes('?') ? '&' : '?') + 'muted=1';
+    }
+
+    return (
+      <iframe 
+        src={finalSrc} 
+        className="media-node-inner" 
+        allowFullScreen 
+        height={height} 
+      />
+    );
   }, [height, kind, node.attrs, src]);
 
   const startResize = (event: React.MouseEvent<HTMLButtonElement>) => {

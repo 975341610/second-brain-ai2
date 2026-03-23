@@ -60,10 +60,13 @@ export default function App() {
     deleteNote,
     restoreNote,
     purgeNote,
+    purgeTrash,
     selectNote,
     updateNoteTags,
     createTask,
     updateTaskStatus,
+    deleteTask,
+    clearCompletedTasks,
     askAssistant,
     askStreamingAssistant,
     uploadFiles,
@@ -101,16 +104,10 @@ export default function App() {
 
   return (
     <>
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(248,214,135,0.45),_transparent_35%),linear-gradient(135deg,_#f4efe4,_#d9e7df_55%,_#f7f4ee)] p-4 text-stone-900 lg:p-6">
-      <div className="mx-auto mb-4 flex max-w-[1680px] items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2 text-xs font-medium">
-          {isUploading && <span className="rounded-full bg-amber-600 px-3 py-2 text-white">文件导入中</span>}
-          {loading && <span className="rounded-full bg-emerald-700 px-3 py-2 text-white">AI 正在处理中</span>}
-        </div>
-      </div>
-
+    <main className="min-h-screen bg-reflect-bg text-reflect-text font-sans antialiased lg:flex lg:gap-0">
+      {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 rounded-2xl border px-6 py-4 text-sm shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 ${toastClasses}`}>
+        <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 rounded-xl border px-6 py-4 text-sm shadow-soft-lg animate-in fade-in slide-in-from-bottom-4 duration-300 ${toastClasses}`}>
           {toastIcon}
           <span className="font-medium">{toast.text}</span>
           <button onClick={clearToast} className="ml-2 p-1 hover:bg-black/5 rounded-full transition-colors opacity-70">
@@ -119,15 +116,32 @@ export default function App() {
         </div>
       )}
 
-      <div className="mx-auto mb-4 grid max-w-[1680px] grid-cols-4 gap-2 xl:hidden">
-        {mobileTabs.map((tab) => {
-          const Icon = tab.icon;
-          return <button key={tab.key} onClick={() => setMobileTab(tab.key)} className={`rounded-2xl px-3 py-3 text-sm font-medium ${mobileTab === tab.key ? 'bg-stone-900 text-white' : 'bg-white/70 text-stone-600'}`}><div className="flex items-center justify-center gap-2"><Icon size={15} /> {tab.label}</div></button>;
-        })}
-      </div>
+      {/* Main Layout Container */}
+      <div className="flex-1 flex flex-col lg:flex-row h-screen overflow-hidden">
+        {/* Mobile Navigation (Tabs) */}
+        <div className="lg:hidden p-4 grid grid-cols-2 gap-2">
+          {mobileTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button 
+                key={tab.key} 
+                onClick={() => setMobileTab(tab.key)} 
+                className={`rounded-xl px-3 py-3 text-sm font-medium transition-all ${mobileTab === tab.key ? 'bg-reflect-text text-white' : 'bg-reflect-sidebar/50 text-reflect-muted'}`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Icon size={15} /> 
+                  {tab.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className={`mx-auto grid max-w-[1680px] gap-3 ${activePage === 'notes' ? 'xl:grid-cols-[minmax(240px,2.1fr)_minmax(0,8fr)]' : 'xl:grid-cols-[320px_minmax(0,1fr)]'}`}>
-        <div className={`${mobileTab === 'notes' || activePage !== 'notes' ? 'block' : 'hidden xl:block'}`}>
+        {/* Sidebar Navigation */}
+        <div className={`
+          ${mobileTab === 'notes' || activePage !== 'notes' ? 'block' : 'hidden lg:block'} 
+          w-full lg:w-[320px] lg:border-r border-reflect-border/50 bg-reflect-sidebar/40
+        `}>
           <Sidebar
             activePage={activePage}
             onChangePage={setActivePage}
@@ -166,27 +180,47 @@ export default function App() {
             onDeleteNote={(noteId) => void deleteNote(noteId)}
             onRestoreNote={(noteId) => void restoreNote(noteId)}
             onPurgeNote={(noteId) => void purgeNote(noteId)}
+            onPurgeTrash={() => void purgeTrash()}
             onUpload={(files) => void uploadFiles(files)}
           />
         </div>
 
-        <div className="min-h-0 grid gap-4">
-          {activePage === 'home' && <HomeDashboard recentNotes={recentNotes} tasks={tasks} assistant={assistant} modelConfig={modelConfig} sessions={chatSessions} activeSessionId={activeChatSessionId} onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} onAsk={askStreamingAssistant} onCreateTask={createTask} onUpdateTaskStatus={updateTaskStatus} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} />}
-          {activePage === 'database' && (
-            <DatabaseView 
-              notes={notes} 
-              onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }}
-              onCreateNote={() => createDraftNote()}
-              onUpdateNoteProperty={async (noteId, propertyId, value) => {
-                await api.updateNoteProperty(noteId, propertyId, { value });
-                // 重新加载数据以刷新视图
-                void loadInitialData();
-              }}
-            />
-          )}
-          {activePage === 'settings' && <SettingsPanel modelConfig={modelConfig} onUpdateModelConfig={updateModelConfig} />}
-          {activePage === 'notes' && (
-            <div className={mobileTab === 'editor' ? 'block' : 'hidden xl:block'}>
+        {/* Content Area */}
+        <div className="flex-1 overflow-auto bg-reflect-bg relative">
+          <div className="max-w-5xl mx-auto px-6 py-8 h-full">
+            {activePage === 'home' && <HomeDashboard 
+              recentNotes={recentNotes} 
+              tasks={tasks} 
+              assistant={assistant} 
+              modelConfig={modelConfig} 
+              sessions={chatSessions} 
+              activeSessionId={activeChatSessionId} 
+              onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} 
+              onAsk={askStreamingAssistant} 
+              onCreateTask={createTask} 
+              onUpdateTaskStatus={updateTaskStatus} 
+              onDeleteTask={deleteTask}
+              onClearCompleted={clearCompletedTasks}
+              onStartNewChat={startNewChat} 
+              onSwitchSession={setActiveChatSession} 
+              onClearSession={clearActiveChat} 
+              onRenameSession={renameChatSession} 
+              onDeleteSession={deleteChatSession} 
+            />}
+            {activePage === 'database' && (
+              <DatabaseView 
+                notes={notes} 
+                onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }}
+                onCreateNote={() => createDraftNote()}
+                onUpdateNoteProperty={async (noteId, propertyId, value) => {
+                  await api.updateNoteProperty(noteId, propertyId, { value });
+                  void loadInitialData();
+                }}
+              />
+            )}
+            {activePage === 'settings' && <SettingsPanel modelConfig={modelConfig} onUpdateModelConfig={updateModelConfig} />}
+            {activePage === 'notes' && (
+              <div className={`${mobileTab === 'editor' ? 'block' : 'hidden lg:block'} h-full`}>
                 <EditorPanel 
                   note={selectedNote} 
                   notes={notes}
@@ -200,18 +234,23 @@ export default function App() {
                   references={references} 
                   relatedNotes={relatedNotes} 
                 />
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Floating AI Trigger */}
       {activePage === 'notes' && (
         <>
-          <button onClick={() => setShowAssistantCard((value) => !value)} className="fixed bottom-6 right-6 z-30 rounded-full bg-stone-900 p-4 text-white shadow-soft">
+          <button 
+            onClick={() => setShowAssistantCard((value) => !value)} 
+            className="fixed bottom-8 right-8 z-30 rounded-full bg-reflect-text p-4 text-white shadow-soft hover:scale-105 transition-transform"
+          >
             <Bot size={20} />
           </button>
           {showAssistantCard && (
-            <div className="fixed bottom-24 right-6 z-30 w-[340px] max-w-[calc(100vw-2rem)]">
+            <div className="fixed bottom-24 right-8 z-30 w-[400px] max-w-[calc(100vw-2rem)]">
               <AssistantPanel assistant={assistant} modelConfig={modelConfig} loading={loading} onAsk={askStreamingAssistant} sessions={chatSessions} activeSessionId={activeChatSessionId} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} onUpdateModelConfig={async () => {}} />
             </div>
           )}

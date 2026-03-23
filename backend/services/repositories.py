@@ -175,9 +175,16 @@ def restore_note(db: Session, note_id: int) -> Note | None:
     note = db.get(Note, note_id)
     if not note:
         return None
+    
+    # Check if parent is deleted
+    if note.parent_id:
+        parent = db.get(Note, note_id=note.parent_id)
+        if not parent or parent.deleted_at is not None:
+            note.parent_id = None
+            
     note.deleted_at = None
     note.notebook_id = note.notebook_id or get_or_create_default_notebook(db).id
-    note.position = next_note_position(db, note.notebook_id)
+    note.position = next_note_position(db, note.notebook_id, note.parent_id)
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -191,6 +198,19 @@ def purge_note(db: Session, note_id: int) -> bool:
     db.delete(note)
     db.commit()
     return True
+
+
+def purge_trash(db: Session) -> bool:
+    try:
+        # Purge trashed notes
+        db.query(Note).filter(Note.deleted_at.is_not(None)).delete(synchronize_session=False)
+        # Purge trashed notebooks (only if not default)
+        db.query(Notebook).filter(Notebook.deleted_at.is_not(None), Notebook.name != DEFAULT_NOTEBOOK_NAME).delete(synchronize_session=False)
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        return False
 
 
 def soft_delete_notebook(db: Session, notebook_id: int) -> Notebook | None:
@@ -315,6 +335,25 @@ def update_task(
     db.commit()
     db.refresh(task)
     return task
+
+
+def delete_task(db: Session, task_id: int) -> bool:
+    task = db.get(Task, task_id)
+    if not task:
+        return False
+    db.delete(task)
+    db.commit()
+    return True
+
+
+def clear_completed_tasks(db: Session) -> int:
+    statement = select(Task).where(Task.status == "done")
+    tasks = list(db.scalars(statement))
+    count = len(tasks)
+    for task in tasks:
+        db.delete(task)
+    db.commit()
+    return count
 
 
 def create_note_property(db: Session, note_id: int, name: str, type: str, value: str) -> NoteProperty:

@@ -49,12 +49,15 @@ export const api = {
     request(`/notes/${noteId}/properties/${propertyId}`, { method: 'DELETE' }),
   restoreNote: (noteId: number) => request<Note>(`/notes/${noteId}/restore`, { method: 'POST' }),
   purgeNote: (noteId: number) => request(`/notes/${noteId}/purge`, { method: 'DELETE' }),
+  purgeTrash: () => request('/trash/purge', { method: 'DELETE' }),
   getTrash: () => request<TrashState>('/trash'),
   listTasks: () => request<Task[]>('/tasks'),
   createTask: (payload: { title: string; status?: string; priority?: string; task_type?: string; deadline?: string | null }) =>
     request<Task>('/tasks', { method: 'POST', body: JSON.stringify(payload) }),
   updateTask: (taskId: number, payload: { title?: string; status?: string; priority?: string; task_type?: string; deadline?: string | null }) =>
     request<Task>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteTask: (taskId: number) => request(`/tasks/${taskId}`, { method: 'DELETE' }),
+  clearCompletedTasks: () => request('/tasks/clear-completed', { method: 'POST' }),
   ask: (payload: { question: string; mode: 'chat' | 'rag' | 'agent' }) =>
     request<AskResponse>('/ask', { method: 'POST', body: JSON.stringify(payload) }),
   runAgent: (goal: string) => request('/agent', { method: 'POST', body: JSON.stringify({ goal }) }),
