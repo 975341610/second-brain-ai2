@@ -60,4 +60,32 @@ def open_browser() -> None:
 if __name__ == "__main__":
     setup_desktop_env()
     threading.Thread(target=open_browser, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=8765, log_level="info")
+
+    # ============================================================
+    # 🔧 PyInstaller 打包后 sys.stdout/stderr 为 None
+    # uvicorn 的 DefaultFormatter 在初始化时会调用 stream.isatty()
+    # 导致 AttributeError → ValueError: Unable to configure formatter
+    # 修复：将 None 的流重定向到 os.devnull，同时在 frozen 环境下
+    # 使用最简日志配置，绕过 uvicorn 的彩色格式器。
+    # ============================================================
+    if getattr(sys, "frozen", False):
+        # 重定向空流，防止 uvicorn/logging 访问 None.isatty()
+        devnull = open(os.devnull, "w")
+        if sys.stdout is None:
+            sys.stdout = devnull
+        if sys.stderr is None:
+            sys.stderr = devnull
+
+        # 使用最简日志配置，跳过 uvicorn 的 DefaultFormatter
+        import logging
+        logging.basicConfig(level=logging.WARNING)
+
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=8765,
+            log_config=None,   # 完全禁用 uvicorn 自带的日志配置
+            log_level="warning",
+        )
+    else:
+        uvicorn.run(app, host="127.0.0.1", port=8765, log_level="info")
