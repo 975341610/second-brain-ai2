@@ -59,17 +59,21 @@ def open_browser() -> None:
 
 if __name__ == "__main__":
     setup_desktop_env()
+    
+    # 打印一些调试信息到控制台
+    print(f"[*] Starting Second Brain AI...")
+    print(f"[*] Frozen: {getattr(sys, 'frozen', False)}")
+    print(f"[*] Executable: {sys.executable}")
+    print(f"[*] Current Working Directory: {os.getcwd()}")
+    if hasattr(sys, '_MEIPASS'):
+        print(f"[*] _MEIPASS: {sys._MEIPASS}")
+
     threading.Thread(target=open_browser, daemon=True).start()
 
     # ============================================================
     # 🔧 PyInstaller 打包后 sys.stdout/stderr 为 None
-    # uvicorn 的 DefaultFormatter 在初始化时会调用 stream.isatty()
-    # 导致 AttributeError → ValueError: Unable to configure formatter
-    # 修复：将 None 的流重定向到 os.devnull，同时在 frozen 环境下
-    # 使用最简日志配置，绕过 uvicorn 的彩色格式器。
     # ============================================================
     if getattr(sys, "frozen", False):
-        # 🔧 增强鲁棒性：彻底解决 stdout/stderr 为 None 的各种场景
         class DevNull:
             def write(self, *args, **kwargs): pass
             def flush(self): pass
@@ -81,14 +85,15 @@ if __name__ == "__main__":
             sys.stderr = DevNull()
 
         import logging
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=logging.INFO) # 改为 INFO 看看输出
 
+        print("[*] Launching uvicorn...")
         uvicorn.run(
             app,
             host="127.0.0.1",
             port=8765,
             log_config=None,
-            log_level="warning",
+            log_level="info", # 改为 info
         )
     else:
         uvicorn.run(app, host="127.0.0.1", port=8765, log_level="info")

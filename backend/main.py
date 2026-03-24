@@ -29,8 +29,15 @@ app.include_router(router, prefix=settings.api_prefix)
 
 frontend_dist = runtime_root() / "frontend_dist"
 assets_dir = frontend_dist / "assets"
+
+# 调试信息
+print(f"[*] Frontend dist directory: {frontend_dist}")
+print(f"[*] Frontend index.html exists: {(frontend_dist / 'index.html').exists()}")
+
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+else:
+    print(f"[!] Assets directory not found at {assets_dir}")
 
 # Mount media uploads
 uploads_dir = Path(settings.uploads_path)
