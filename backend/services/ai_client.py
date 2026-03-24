@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
+from typing import Any
+
+import httpx
 
 from backend.config import get_settings
 from backend.services.offline_ai import answer_from_context, build_embedding, generate_tags, plan_tasks, summarize_text
