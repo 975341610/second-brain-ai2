@@ -37,6 +37,10 @@ from backend.models.schemas import (
     UploadResponse,
 )
 from backend.database import get_db
+from backend.utils import log_buffer
+import subprocess
+import json
+from backend.config import get_settings, get_custom_config_path, PROJECT_DIR
 from backend.rag.pipeline import citations_from_results, cosine_similarity, search_knowledge
 from backend.services.ai_client import AIClient
 from backend.services.document_service import chunk_text, parse_document
@@ -554,3 +558,85 @@ def update_model_config_api(payload: ModelConfigPayload, db: Session = Depends(g
         "base_url": config.base_url,
         "model_name": config.model_name,
     }
+
+# ============================================================
+# 🖥️ 系统管理接口 (Windows 窗口化增强)
+# ============================================================
+
+@router.get("/system/logs")
+async def get_system_logs():
+    """获取实时日志 Buffer"""
+    return {"logs": log_buffer.get_logs()}
+
+@router.post("/system/data-path")
+async def update_data_path(payload: dict):
+    """更新自定义数据路径并移动现有文件"""
+    new_path_str = payload.get("data_path")
+    if not new_path_str:
+        raise HTTPException(status_code=400, detail="Missing data_path")
+    
+    new_path = Path(new_path_str).resolve()
+    old_path = settings.data_root
+    
+    if new_path == old_path:
+        return {"status": "ok", "message": "Path is same"}
+
+    try:
+        # 1. 确保新路径父目录存在
+        new_path.mkdir(parents=True, exist_ok=True)
+        
+        # 2. 移动现有文件 (如果有)
+        if old_path.exists():
+            print(f"[*] Moving data from {old_path} to {new_path}...")
+            # 由于可能跨盘符，采用 copy + remove
+            for item in old_path.iterdir():
+                dest = new_path / item.name
+                if item.is_dir():
+                    shutil.copytree(item, dest, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(item, dest)
+            # 备注：为了安全，暂不删除原目录，让用户手动清理
+            # shutil.rmtree(old_path)
+            
+        # 3. 写入配置文件
+        config_path = get_custom_config_path()
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump({"data_path": str(new_path)}, f, indent=4)
+            
+        return {"status": "ok", "message": "Data path updated. Please restart app."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update data path: {str(e)}")
+
+@router.post("/system/update")
+async def system_update():
+    """执行 git pull origin main 并返回结果"""
+    try:
+        print("[*] Checking for updates...")
+        process = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore'
+        )
+        output = process.stdout + "\n" + process.stderr
+        print(output)
+        return {"status": "ok", "output": output}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/system/restart")
+async def system_restart():
+    """执行 fast_update.bat 脚本"""
+    try:
+        bat_path = PROJECT_DIR / "fast_update.bat"
+        if not bat_path.exists():
+            raise HTTPException(status_code=404, detail="fast_update.bat not found")
+        
+        print("[*] Restarting application via fast_update.bat...")
+        # 启动脚本，不阻塞当前进程
+        subprocess.Popen([str(bat_path)], shell=True, cwd=str(PROJECT_DIR))
+        return {"status": "ok", "message": "Restarting..."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

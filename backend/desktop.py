@@ -7,6 +7,11 @@ import time
 import webbrowser
 from pathlib import Path
 
+try:
+    import webview
+except ImportError:
+    webview = None
+
 import uvicorn
 
 # ============================================================
@@ -25,6 +30,8 @@ import uvicorn
 # ============================================================
 
 import builtins
+import subprocess
+from backend.utils import log_buffer, setup_log_interceptor
 
 class _MockEF:
     def __init__(self, *args, **kwargs): pass
@@ -58,42 +65,42 @@ def open_browser() -> None:
 
 
 if __name__ == "__main__":
+    setup_log_interceptor()
     setup_desktop_env()
     
-    # 打印一些调试信息到控制台
-    print(f"[*] Starting Second Brain AI...")
+    # 打印一些调试信息到控制台 (此时会被拦截并存入 buffer)
+    print(f"[*] Starting Second Brain AI (Native Window Mode)...")
     print(f"[*] Frozen: {getattr(sys, 'frozen', False)}")
     print(f"[*] Executable: {sys.executable}")
     print(f"[*] Current Working Directory: {os.getcwd()}")
-    if hasattr(sys, '_MEIPASS'):
-        print(f"[*] _MEIPASS: {sys._MEIPASS}")
 
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    # ============================================================
-    # 🔧 PyInstaller 打包后 sys.stdout/stderr 为 None
-    # ============================================================
-    if getattr(sys, "frozen", False):
-        class DevNull:
-            def write(self, *args, **kwargs): pass
-            def flush(self): pass
-            def isatty(self): return False
-
-        if sys.stdout is None:
-            sys.stdout = DevNull()
-        if sys.stderr is None:
-            sys.stderr = DevNull()
-
-        import logging
-        logging.basicConfig(level=logging.INFO) # 改为 INFO 看看输出
-
-        print("[*] Launching uvicorn...")
+    # 启动后端线程
+    def run_api():
+        print("[*] Launching API server...")
         uvicorn.run(
             app,
             host="127.0.0.1",
             port=8765,
             log_config=None,
-            log_level="info", # 改为 info
+            log_level="info",
         )
+
+    threading.Thread(target=run_api, daemon=True).start()
+
+    # 启动前端窗口
+    if webview:
+        print("[*] Opening Native Window...")
+        webview.create_window(
+            "Second Brain AI",
+            "http://127.0.0.1:8765",
+            width=1280,
+            height=800,
+            background_color="#ffffff"
+        )
+        webview.start()
     else:
-        uvicorn.run(app, host="127.0.0.1", port=8765, log_level="info")
+        print("[!] pywebview not installed. Falling back to browser...")
+        threading.Thread(target=open_browser, daemon=True).start()
+        # 这种情况下主线程不能结束，因为 uvicorn 是在子线程跑的
+        while True:
+            time.sleep(1)

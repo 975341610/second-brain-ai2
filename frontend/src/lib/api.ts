@@ -151,4 +151,14 @@ export const api = {
     
     return finalRes.json() as Promise<{ url: string; name: string; size: number; type: string }>;
   },
+  // ============================================================
+  // 🖥️ 系统管理 API (Windows 窗口化增强)
+  // ============================================================
+  getSystemLogs: () => request<{ logs: string[] }>('/system/logs'),
+  updateDataPath: (dataPath: string) => request<{ status: string; message: string }>('/system/data-path', {
+    method: 'POST',
+    body: JSON.stringify({ data_path: dataPath }),
+  }),
+  checkUpdate: () => request<{ status: string; output: string }>('/system/update', { method: 'POST' }),
+  restartApp: () => request<{ status: string; message: string }>('/system/restart', { method: 'POST' }),
 };
