@@ -276,7 +276,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // 只有在非静默保存（通常是手动点击保存或明确创建笔记）时，才可能更新 selectedNoteId
       // 如果是自动保存 (silent: true)，绝对不触碰当前选中的 ID，防止页面跳变
       const isCurrentlyViewingThisNote = get().selectedNoteId === id;
-      const shouldUpdateSelection = !silent && (isCurrentlyViewingThisNote || !get().selectedNoteId || isDraft);
+      const shouldUpdateSelection = isDraft || (!silent && (isCurrentlyViewingThisNote || !get().selectedNoteId));
       
       set({ 
         notes, 

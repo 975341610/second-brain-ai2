@@ -305,7 +305,7 @@ async def inline_ai(payload: InlineAIRequest, db: Session = Depends(get_db)):
         async for chunk in ai_client.stream_chat(messages, llm_config):
             yield chunk
     
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(generate(), media_type="text/plain")
 
 @router.post("/chat")
 async def global_chat(payload: AskRequest, db: Session = Depends(get_db)):
@@ -650,13 +650,22 @@ async def system_update(force: bool = False):
         print(f"[*] Git repo dir: {repo_dir}")
         print("[*] Checking for updates...")
         
-        # 4. 先执行 fetch 获取远程状态
-        subprocess.run([git_cmd, "fetch", "origin", "main"], cwd=repo_dir, capture_output=True)
+        # 4. 先执行 fetch 获取远程状态 (设置超时)
+        try:
+            subprocess.run([git_cmd, "fetch", "origin", "main"], cwd=repo_dir, capture_output=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            return {"status": "error", "output": "❌ git fetch 超时 (15s)，请检查网络连接后再重试。"}
         
         # 5. 比较本地和远程版本
-        local = subprocess.run([git_cmd, "rev-parse", "HEAD"], cwd=repo_dir, capture_output=True, text=True).stdout.strip()
-        remote = subprocess.run([git_cmd, "rev-parse", "origin/main"], cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+        local_res = subprocess.run([git_cmd, "rev-parse", "HEAD"], cwd=repo_dir, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+        remote_res = subprocess.run([git_cmd, "rev-parse", "origin/main"], cwd=repo_dir, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         
+        local = local_res.stdout.strip()
+        remote = remote_res.stdout.strip()
+        
+        if not local or not remote:
+            return {"status": "error", "output": f"❌ 获取版本号失败。请确保当前分支是 main，且网络通畅。\nLocal: {local[:7]}\nRemote: {remote[:7]}"}
+
         if local == remote and not force:
             return {"status": "up-to-date", "output": f"🎉 已是最新版本！无需更新。\n当前版本: {local[:7]}"}
 
