@@ -128,6 +128,9 @@ class AIClient:
                 prompt = question # Global Chat mode
 
             response = await self._chat_completion(prompt, config)
+            # If we get an error string, return it directly instead of fallback
+            if response and response.startswith("Error:"):
+                return response
             if response:
                 return response
 
@@ -159,7 +162,7 @@ class AIClient:
     async def _chat_completion(self, prompt: str, config: dict[str, str] | None = None) -> str:
         conf = self._get_active_config(config)
         if not (conf["api_key"] and conf["base_url"]):
-            return ""
+            return "Error: AI Config (API Key or Base URL) is missing in Settings."
 
         headers = {"Authorization": f"Bearer {conf['api_key']}", "Content-Type": "application/json"}
         payload = {
@@ -173,12 +176,16 @@ class AIClient:
         try:
             async with httpx.AsyncClient(timeout=30.0, trust_env=True) as client:
                 response = await client.post(f"{conf['base_url']}/chat/completions", headers=headers, json=payload)
-                response.raise_for_status()
+                if response.status_code != 200:
+                    err_msg = f"Error: {response.status_code} {response.reason_phrase} - {response.text}"
+                    self.logger.error(f"Chat Error: {err_msg} | URL: {conf['base_url']}")
+                    return err_msg
                 body = response.json()
                 return body["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            self.logger.error(f"Chat Error: {str(e)} | URL: {conf['base_url']}")
-            return ""
+            err_msg = f"Error: {str(e)}"
+            self.logger.error(f"Chat Exception: {err_msg} | URL: {conf['base_url']}")
+            return err_msg
 
     async def stream_chat(self, messages: list[dict[str, str]], config: dict[str, str] | None = None):
         conf = self._get_active_config(config)
