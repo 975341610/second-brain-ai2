@@ -27,6 +27,7 @@ hiddenimports = collect_submodules("chromadb") + [
     "backend.models",
     "backend.rag",
     "backend.services",
+    "backend.utils",
     "uvicorn.logging",
     "uvicorn.loops.auto",
     "uvicorn.protocols.http.auto",
@@ -39,6 +40,7 @@ hiddenimports = collect_submodules("chromadb") + [
     "sqlalchemy",
     "pydantic",
     "pydantic_settings",
+    "webview",
 ]
 
 a = Analysis(
@@ -69,7 +71,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,   # 🔧 DEBUG: 暂时开启 console，方便查看报错信息
+    console=False,   # 🚀 Release: 彻底关闭黑窗口
 )
 
 coll = COLLECT(
