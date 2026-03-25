@@ -277,14 +277,18 @@ class AIClient:
 
     async def stream_chat(self, messages: list[dict[str, str]], config: dict[str, str] | None = None):
         conf = self._get_active_config(config)
+        
+        def format_sse_error(msg: str) -> str:
+            return f'data: {json.dumps({"error": msg})}\n\n'
+
         if not (conf["api_key"] and conf["base_url"]):
-            yield "Error: AI Config missing"
+            yield format_sse_error("AI Config missing (API Key or Base URL is empty). Please check your settings.")
             return
 
         # Pre-flight check
         conn_error = await self._check_connectivity(conf['base_url'])
         if conn_error:
-            yield conn_error
+            yield format_sse_error(conn_error)
             return
 
         full_url = f"{conf['base_url']}/chat/completions"
@@ -302,8 +306,15 @@ class AIClient:
             try:
                 self.logger.info(f"Stream Request (Attempt {attempt+1}) | URL: {self._obfuscate_url(full_url)} | trust_env: {self.trust_env}")
                 async with self.client.stream("POST", full_url, headers=headers, json=payload, timeout=60.0) as response:
-                    response.raise_for_status()
-                    
+                    # Handle non-200 status codes manually to yield SSE error
+                    if response.status_code != 200:
+                        await response.aread() # Must read content before accessing response.text
+                        err_body = response.text
+                        err_msg = f"API Error {response.status_code}: {err_body[:200]}"
+                        self.logger.error(f"Stream Status Error: {err_msg} | URL: {conf['base_url']}")
+                        yield format_sse_error(err_msg)
+                        return
+
                     got_first_token = False
                     lines_iter = response.aiter_lines()
                     
@@ -351,7 +362,7 @@ class AIClient:
             except Exception as e:
                 if attempt == 2:
                     self.logger.error(f"Stream Error: {str(e)} | URL: {conf['base_url']}")
-                    yield f"Error: {str(e)}"
+                    yield format_sse_error(str(e))
                 else:
                     self.logger.warning(f"Stream attempt {attempt+1} failed: {str(e)}. Retrying...")
                     await asyncio.sleep(1)

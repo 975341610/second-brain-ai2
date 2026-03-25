@@ -325,8 +325,13 @@ async def inline_ai(payload: InlineAIRequest, db: Session = Depends(get_db)):
     ]
     
     async def generate():
-        async for chunk in ai_client.stream_chat(messages, llm_config):
-            yield chunk
+        try:
+            async for chunk in ai_client.stream_chat(messages, llm_config):
+                yield chunk
+        except Exception as e:
+            import json
+            error_msg = f"Inline AI Error: {str(e)}"
+            yield f'data: {json.dumps({"error": error_msg})}\n\n'
     
     return StreamingResponse(
         generate(), 
@@ -366,11 +371,16 @@ async def global_chat(payload: AskRequest, db: Session = Depends(get_db)):
         ]
         
     async def generate():
-        if payload.mode == "rag":
+        try:
+            if payload.mode == "rag":
+                import json
+                yield f"__CITATIONS__:{json.dumps(citations)}\n"
+            async for chunk in ai_client.stream_chat(messages, llm_config):
+                yield chunk
+        except Exception as e:
             import json
-            yield f"__CITATIONS__:{json.dumps(citations)}\n"
-        async for chunk in ai_client.stream_chat(messages, llm_config):
-            yield chunk
+            error_msg = f"Streaming Error: {str(e)}"
+            yield f'data: {json.dumps({"error": error_msg})}\n\n'
             
     return StreamingResponse(
         generate(), 
