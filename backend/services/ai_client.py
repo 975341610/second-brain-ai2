@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import asyncio
+import socket
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
 
@@ -41,16 +43,29 @@ class AIClient:
         # 注意：在某些环境中 trust_env=True 可能会因为环境变量解析失败导致启动崩溃
         try:
             self.client = httpx.AsyncClient(timeout=60.0, trust_env=True, limits=limits, verify=verify)
+            self.trust_env = True
         except Exception:
             self.client = httpx.AsyncClient(timeout=60.0, trust_env=False, limits=limits, verify=verify)
+            self.trust_env = False
 
     def _get_active_config(self, config: dict[str, str] | None = None) -> dict[str, str]:
         active = config or {}
         api_key = active.get("api_key") or self.settings.openclaw_api_key
-        base_url = (active.get("base_url") or self.settings.openclaw_base_url).rstrip("/")
+        base_url = (active.get("base_url") or self.settings.openclaw_base_url).strip().rstrip("/")
         model_name = active.get("model_name") or self.settings.default_model
 
-        # Auto-append /v1 if missing (heuristic for common OpenAI proxies)
+        # 1. URL Normalization: Ensure scheme exists
+        if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
+            # If user provided something like 1.2.3.4 or api.openai.com
+            base_url = f"https://{base_url}"
+
+        # 2. Heuristic: Strip full API endpoints if accidentally pasted
+        # Users often paste "https://api.openai.com/v1/chat/completions"
+        for suffix in ["/chat/completions", "/embeddings"]:
+            if base_url.endswith(suffix):
+                base_url = base_url[: -len(suffix)].rstrip("/")
+
+        # 3. Auto-append /v1 if missing (heuristic for common OpenAI proxies)
         if base_url and not base_url.endswith("/v1") and "vpsairobot.com" in base_url:
             base_url = f"{base_url}/v1"
 
@@ -64,18 +79,72 @@ class AIClient:
         conf = self._get_active_config(config)
         return bool(conf["api_key"] and conf["base_url"])
 
+    def _obfuscate_url(self, url: str) -> str:
+        """Hide host components if it's sensitive, but show domain for debugging."""
+        parsed = urlparse(url)
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+    async def _check_connectivity(self, url: str) -> str | None:
+        """
+        Verify DNS resolution and basic connectivity to the base URL host.
+        Returns an error message if failed, else None.
+        """
+        parsed = urlparse(url)
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+        if not host:
+            return "Error: Invalid Hostname. Please check your AI API base URL setting."
+
+        try:
+            # 1. DNS Resolution Check
+            # Windows error 11001: getaddrinfo failed is exactly what this checks.
+            resolved = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: socket.getaddrinfo(host, port)
+            )
+            # Log successful resolution for observability
+            ips = {info[4][0] for info in resolved}
+            self.logger.info(f"DNS resolved {host} to: {list(ips)}")
+            return None
+        except socket.gaierror as e:
+            err_code = e.errno
+            err_str = f"域名解析失败 ({host}): [Errno {err_code}] {str(e)}"
+            self.logger.error(f"Connectivity Check Failed: {err_str} | URL: {url}")
+            
+            # Detailed guidance for Windows users (most common case for 11001)
+            diagnostic_msg = (
+                f"Error: {err_str}\n\n"
+                "诊断建议：\n"
+                "1. 请在终端运行 'nslookup " + host + "' 检查域名解析是否正常。\n"
+                "2. 检查系统代理设置，确保允许连接到该域名。\n"
+                "3. 如果使用 VPN，请确认 VPN 处于连接状态且分流规则正确。\n"
+                "4. 检查防火墙或杀毒软件是否拦截了访问。"
+            )
+            return diagnostic_msg
+        except Exception as e:
+            return f"Error: Connectivity check failed: {str(e)}"
+
     async def embed(self, text: str, config: dict[str, str] | None = None) -> list[float]:
         if not self._can_call_remote(config):
             return build_embedding(text, self.settings.embedding_dimension)
 
         conf = self._get_active_config(config)
+        full_url = f"{conf['base_url']}/embeddings"
+        
+        # Pre-flight check
+        conn_error = await self._check_connectivity(conf['base_url'])
+        if conn_error:
+            self.logger.error(f"Embed Pre-flight Error: {conn_error}")
+            return build_embedding(text, self.settings.embedding_dimension)
+
         headers = {"Authorization": f"Bearer {conf['api_key']}", "Content-Type": "application/json"}
         payload = {
             "model": conf["model_name"],
             "input": text,
         }
         try:
-            response = await self.client.post(f"{conf['base_url']}/embeddings", headers=headers, json=payload, timeout=10.0)
+            self.logger.info(f"Embed Request | URL: {self._obfuscate_url(full_url)} | trust_env: {self.trust_env}")
+            response = await self.client.post(full_url, headers=headers, json=payload, timeout=10.0)
             response.raise_for_status()
             body = response.json()
             return body["data"][0]["embedding"]
@@ -177,6 +246,12 @@ class AIClient:
         if not (conf["api_key"] and conf["base_url"]):
             return "Error: AI Config (API Key or Base URL) is missing in Settings."
 
+        # Pre-flight check
+        conn_error = await self._check_connectivity(conf['base_url'])
+        if conn_error:
+            return conn_error
+
+        full_url = f"{conf['base_url']}/chat/completions"
         headers = {"Authorization": f"Bearer {conf['api_key']}", "Content-Type": "application/json"}
         payload = {
             "model": conf["model_name"],
@@ -187,7 +262,8 @@ class AIClient:
             "temperature": 0.2,
         }
         try:
-            response = await self.client.post(f"{conf['base_url']}/chat/completions", headers=headers, json=payload, timeout=30.0)
+            self.logger.info(f"Chat Request | URL: {self._obfuscate_url(full_url)} | trust_env: {self.trust_env}")
+            response = await self.client.post(full_url, headers=headers, json=payload, timeout=30.0)
             if response.status_code != 200:
                 err_msg = f"Error: {response.status_code} {response.reason_phrase} - {response.text}"
                 self.logger.error(f"Chat Error: {err_msg} | URL: {conf['base_url']}")
@@ -205,6 +281,13 @@ class AIClient:
             yield "Error: AI Config missing"
             return
 
+        # Pre-flight check
+        conn_error = await self._check_connectivity(conf['base_url'])
+        if conn_error:
+            yield conn_error
+            return
+
+        full_url = f"{conf['base_url']}/chat/completions"
         headers = {"Authorization": f"Bearer {conf['api_key']}", "Content-Type": "application/json"}
         payload = {
             "model": conf["model_name"],
@@ -217,7 +300,8 @@ class AIClient:
         
         for attempt in range(3):
             try:
-                async with self.client.stream("POST", f"{conf['base_url']}/chat/completions", headers=headers, json=payload, timeout=60.0) as response:
+                self.logger.info(f"Stream Request (Attempt {attempt+1}) | URL: {self._obfuscate_url(full_url)} | trust_env: {self.trust_env}")
+                async with self.client.stream("POST", full_url, headers=headers, json=payload, timeout=60.0) as response:
                     response.raise_for_status()
                     
                     got_first_token = False
