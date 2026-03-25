@@ -2,6 +2,9 @@
 import httpx
 import sys
 import time
+import socket
+import ssl
+from urllib.parse import urlparse
 
 # === 用户配置区 ===
 API_KEY = "your-api-key-here"
@@ -9,12 +12,75 @@ BASE_URL = "https://api.openai.com/v1" # 确保包含 /v1 路径
 MODEL = "gpt-3.5-turbo"
 # =================
 
+def preflight_check(url: str):
+    print(f"[*] 正在进行预检 (Pre-flight Check)...")
+    parsed = urlparse(url)
+    scheme = parsed.scheme
+    host = parsed.hostname
+    port = parsed.port or (443 if scheme == "https" else 80)
+    
+    print(f"[*] Scheme: {scheme}")
+    print(f"[*] Host: {host}")
+    print(f"[*] Port: {port}")
+
+    if not host:
+        print(f"[-] 错误: 无法解析主机名。请检查 BASE_URL。")
+        return False
+
+    # 1. DNS Resolution
+    print(f"[*] 1. DNS 解析测试...")
+    try:
+        ais = socket.getaddrinfo(host, port)
+        ips = {a[4][0] for a in ais}
+        print(f"[+] DNS 解析成功: {list(ips)}")
+    except socket.gaierror as e:
+        print(f"[-] DNS 解析失败: {e}")
+        return False
+
+    # 2. TCP Connect
+    print(f"[*] 2. TCP 连接测试 ({host}:{port})...")
+    try:
+        with socket.create_connection((host, port), timeout=10) as sock:
+            print(f"[+] TCP 连接成功！")
+            
+            # 3. TLS Handshake (if https)
+            if scheme == "https":
+                print(f"[*] 3. TLS 握手测试...")
+                context = ssl.create_default_context()
+                # 某些环境下可能需要禁用验证进行诊断，但默认应开启
+                # context.check_hostname = False
+                # context.verify_mode = ssl.CERT_NONE
+                try:
+                    with context.wrap_socket(sock, server_hostname=host) as ssock:
+                        cert = ssock.getpeercert()
+                        print(f"[+] TLS 握手成功！")
+                except ssl.SSLError as e:
+                    print(f"[-] TLS 握手失败: {e}")
+                    print("    建议: 检查是否为代理拦截、证书过期或系统证书库缺失。")
+                    return False
+    except socket.timeout:
+        print(f"[-] TCP 连接超时！")
+        return False
+    except ConnectionRefusedError:
+        print(f"[-] TCP 连接被拒绝！")
+        return False
+    except Exception as e:
+        print(f"[-] TCP 连接发生异常: {e}")
+        return False
+
+    print(f"[+] 预检全部通过！")
+    return True
+
 def test_connection():
     print(f"[*] 开始诊断 AI 连接性...")
     print(f"[*] BASE_URL: {BASE_URL}")
     print(f"[*] MODEL: {MODEL}")
-    print(f"[*] API_KEY: {'*' * (len(API_KEY)-4) + API_KEY[-4:] if len(API_KEY) > 4 else '***'}")
+    print(f"[*] API_KEY: {'*' * (max(0, len(API_KEY)-4)) + API_KEY[-4:] if len(API_KEY) > 4 else '***'}")
     
+    if not preflight_check(BASE_URL):
+        print(f"[!] 预检失败，跳过 HTTP 请求。")
+        return
+
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"

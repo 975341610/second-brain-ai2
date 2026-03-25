@@ -87,6 +87,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const [propertyMenuNode, setPropertyMenuNode] = useState<{ pos: number; rect: DOMRect } | null>(null);
   const [activeTableRect, setActiveTableRect] = useState<DOMRect | null>(null);
   const [activeRowRect, setActiveRowRect] = useState<DOMRect | null>(null);
+  const [activeTablePos, setActiveTablePos] = useState<number | null>(null);
+  const [activeRowPos, setActiveRowPos] = useState<number | null>(null);
   const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null);
   const [clickedRowIndex, setClickedRowIndex] = useState<number | null>(null);
   
@@ -382,12 +384,25 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         
         if (table) {
           setActiveTableRect(table.getBoundingClientRect());
+          
+          // 获取表格位置
+          try {
+            const tablePos = editor.view.posAtDOM(table, 0);
+            setActiveTablePos(tablePos);
+          } catch (e) {}
+
           if (tr) {
             setActiveRowRect(tr.getBoundingClientRect());
             setHoveredRowIndex(rowIndex);
+            // 获取行位置
+            try {
+              const rowPos = editor.view.posAtDOM(tr, 0);
+              setActiveRowPos(rowPos);
+            } catch (e) {}
           } else {
             setActiveRowRect(null);
             setHoveredRowIndex(null);
+            setActiveRowPos(null);
           }
         } else {
           // 如果不在表格内，检查是否在控制按钮内
@@ -397,6 +412,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
             setActiveRowRect(null);
             setHoveredRowIndex(null);
             setClickedRowIndex(null); // 鼠标移出表格且不在按钮上时，重置点击状态
+            setActiveTablePos(null);
+            setActiveRowPos(null);
           }
         }
       }
@@ -728,7 +745,14 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 <button
                   onClick={(e) => {
                     e.preventDefault();
-                    editor.chain().focus().addColumnAfter().run();
+                    // 强制移动焦点到表格内
+                    const targetPos = activeRowPos ?? activeTablePos;
+                    if (targetPos !== null) {
+                      // targetPos + 1 通常能落入单元格内
+                      editor.chain().focus(targetPos + 1).addColumnAfter().run();
+                    } else {
+                      editor.chain().focus().addColumnAfter().run();
+                    }
                   }}
                   onMouseDown={(e) => e.preventDefault()}
                   className="w-5 h-5 flex items-center justify-center bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 hover:scale-110 transition-all"
@@ -743,7 +767,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 <button
                   onClick={(e) => {
                     e.preventDefault();
-                    editor.chain().focus().addRowAfter().run();
+                    const targetPos = activeRowPos ?? activeTablePos;
+                    if (targetPos !== null) {
+                      editor.chain().focus(targetPos + 1).addRowAfter().run();
+                    } else {
+                      editor.chain().focus().addRowAfter().run();
+                    }
                   }}
                   onMouseDown={(e) => e.preventDefault()}
                   className="w-5 h-5 flex items-center justify-center bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 hover:scale-110 transition-all"
@@ -760,7 +789,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 <button
                   onClick={(e) => {
                     e.preventDefault();
-                    editor.chain().focus().deleteTable().run();
+                    const targetPos = activeTablePos;
+                    if (targetPos !== null) {
+                      editor.chain().focus(targetPos + 1).deleteTable().run();
+                    } else {
+                      editor.chain().focus().deleteTable().run();
+                    }
                   }}
                   onMouseDown={(e) => e.preventDefault()}
                   className="w-5 h-5 flex items-center justify-center bg-white border border-stone-200 text-stone-400 rounded-md hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all shadow-sm"
@@ -793,7 +827,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                       <button
                         onClick={(e) => {
                           e.preventDefault();
-                          editor.chain().focus().deleteRow().run();
+                          const targetPos = activeRowPos;
+                          if (targetPos !== null) {
+                            editor.chain().focus(targetPos + 1).deleteRow().run();
+                          } else {
+                            editor.chain().focus().deleteRow().run();
+                          }
                           setClickedRowIndex(null);
                         }}
                         className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded transition-colors"
@@ -962,7 +1001,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
               <div className="flex flex-col gap-0.5 mt-1 relative z-10">
                 <button 
                   onClick={() => {
-                    editor.chain().focus().addColumnBefore().run();
+                    editor.chain().focus(propertyMenuNode.pos + 1).addColumnBefore().run();
                     setPropertyMenuNode(null);
                   }}
                   className="flex items-center gap-2 px-3 py-2 text-sm text-stone-700 hover:bg-stone-100 rounded-md transition-colors w-full text-left"
@@ -972,7 +1011,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 </button>
                 <button 
                   onClick={() => {
-                    editor.chain().focus().addColumnAfter().run();
+                    editor.chain().focus(propertyMenuNode.pos + 1).addColumnAfter().run();
                     setPropertyMenuNode(null);
                   }}
                   className="flex items-center gap-2 px-3 py-2 text-sm text-stone-700 hover:bg-stone-100 rounded-md transition-colors w-full text-left"
@@ -983,7 +1022,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 <div className="h-px bg-stone-100 my-1 mx-2" />
                 <button 
                   onClick={() => {
-                    editor.chain().focus().deleteColumn().run();
+                    editor.chain().focus(propertyMenuNode.pos + 1).deleteColumn().run();
                     setPropertyMenuNode(null);
                   }}
                   className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors w-full text-left"

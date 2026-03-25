@@ -86,7 +86,7 @@ class AIClient:
 
     async def _check_connectivity(self, url: str) -> str | None:
         """
-        Verify DNS resolution and basic connectivity to the base URL host.
+        Verify DNS resolution and TCP connectivity to the base URL host.
         Returns an error message if failed, else None.
         """
         parsed = urlparse(url)
@@ -96,33 +96,46 @@ class AIClient:
         if not host:
             return "Error: Invalid Hostname. Please check your AI API base URL setting."
 
+        # Detect Anthropic Endpoint
+        if "api.anthropic.com" in host or "/v1/messages" in url:
+            return (
+                "Error: 检测到 Anthropic 官方端点。\n"
+                "当前版本仅支持 OpenAI 兼容协议。若要使用 Claude，请配置 OpenAI 兼容的转发网关 "
+                "(如 One-API, New-API) 或中转服务，并将 Base URL 指向该网关。"
+            )
+
         try:
             # 1. DNS Resolution Check
-            # Windows error 11001: getaddrinfo failed is exactly what this checks.
             resolved = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: socket.getaddrinfo(host, port)
             )
-            # Log successful resolution for observability
             ips = {info[4][0] for info in resolved}
             self.logger.info(f"DNS resolved {host} to: {list(ips)}")
+
+            # 2. TCP Connect Check
+            # Windows error 10061 (Connection Refused) or 10060 (Timeout)
+            def _tcp_check():
+                with socket.create_connection((host, port), timeout=5) as _:
+                    return True
+            
+            await asyncio.get_running_loop().run_in_executor(None, _tcp_check)
             return None
         except socket.gaierror as e:
-            err_code = e.errno
-            err_str = f"域名解析失败 ({host}): [Errno {err_code}] {str(e)}"
-            self.logger.error(f"Connectivity Check Failed: {err_str} | URL: {url}")
-            
-            # Detailed guidance for Windows users (most common case for 11001)
-            diagnostic_msg = (
-                f"Error: {err_str}\n\n"
-                "诊断建议：\n"
-                "1. 请在终端运行 'nslookup " + host + "' 检查域名解析是否正常。\n"
-                "2. 检查系统代理设置，确保允许连接到该域名。\n"
-                "3. 如果使用 VPN，请确认 VPN 处于连接状态且分流规则正确。\n"
-                "4. 检查防火墙或杀毒软件是否拦截了访问。"
-            )
-            return diagnostic_msg
+            err_str = f"域名解析失败 ({host}): [Errno {e.errno}] {str(e)}"
+            self.logger.error(f"Connectivity Check Failed (DNS): {err_str}")
+            return f"Error: {err_str}\n请检查网络连接或域名是否输入正确。"
+        except (socket.timeout, TimeoutError):
+            err_str = f"连接超时 ({host}:{port})"
+            self.logger.error(f"Connectivity Check Failed (Timeout): {err_str}")
+            return f"Error: {err_str}\n请确认 API 地址可达，或检查代理/防火墙设置。"
+        except ConnectionRefusedError:
+            err_str = f"连接被拒绝 ({host}:{port})"
+            self.logger.error(f"Connectivity Check Failed (Refused): {err_str}")
+            return f"Error: {err_str}\n目标服务器拒绝连接，请检查端口号或代理配置。"
         except Exception as e:
-            return f"Error: Connectivity check failed: {str(e)}"
+            err_str = f"连接预检异常: {str(e)}"
+            self.logger.error(f"Connectivity Check Failed: {err_str}")
+            return f"Error: {err_str}"
 
     async def embed(self, text: str, config: dict[str, str] | None = None) -> list[float]:
         if not self._can_call_remote(config):
@@ -241,6 +254,20 @@ class AIClient:
                 pass
         return plan_tasks(goal, [item["excerpt"] for item in contexts])
 
+    def _format_exception(self, e: Exception, url: str) -> str:
+        err_msg = str(e)
+        if "All connection attempts failed" in err_msg:
+            parsed = urlparse(url)
+            host = parsed.hostname
+            return (
+                f"Error: 无法连接到服务器 ({host})。所有连接尝试均失败。\n"
+                "可能原因：\n"
+                "1. 系统代理设置不正确 (或正在拦截该请求)。\n"
+                "2. 目标 API 域名在中国大陆可能无法直接访问，需要正确配置 VPN/中转网关。\n"
+                "3. 填写的 Base URL 端口号错误 (默认 https 为 443)。"
+            )
+        return f"Error: {err_msg}"
+
     async def _chat_completion(self, prompt: str, config: dict[str, str] | None = None) -> str:
         conf = self._get_active_config(config)
         if not (conf["api_key"] and conf["base_url"]):
@@ -271,7 +298,7 @@ class AIClient:
             body = response.json()
             return body["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            err_msg = f"Error: {str(e)}"
+            err_msg = self._format_exception(e, conf['base_url'])
             self.logger.error(f"Chat Exception: {err_msg} | URL: {conf['base_url']}")
             return err_msg
 
@@ -360,10 +387,11 @@ class AIClient:
                             continue
                 return # Success
             except Exception as e:
+                err_msg = self._format_exception(e, conf['base_url'])
                 if attempt == 2:
-                    self.logger.error(f"Stream Error: {str(e)} | URL: {conf['base_url']}")
-                    yield format_sse_error(str(e))
+                    self.logger.error(f"Stream Error: {err_msg} | URL: {conf['base_url']}")
+                    yield format_sse_error(err_msg)
                 else:
-                    self.logger.warning(f"Stream attempt {attempt+1} failed: {str(e)}. Retrying...")
+                    self.logger.warning(f"Stream attempt {attempt+1} failed: {err_msg}. Retrying...")
                     await asyncio.sleep(1)
                     continue
