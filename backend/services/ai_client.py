@@ -158,11 +158,14 @@ class AIClient:
         try:
             self.logger.info(f"Embed Request | URL: {self._obfuscate_url(full_url)} | trust_env: {self.trust_env}")
             response = await self.client.post(full_url, headers=headers, json=payload, timeout=10.0)
-            response.raise_for_status()
+            if response.status_code != 200:
+                err_msg = self._translate_error(response)
+                self.logger.error(f"Embed Status Error: {err_msg} | URL: {conf['base_url']}")
+                return build_embedding(text, self.settings.embedding_dimension)
             body = response.json()
             return body["data"][0]["embedding"]
         except Exception as e:
-            self.logger.error(f"Embed Error: {str(e)} | URL: {conf['base_url']}")
+            self.logger.error(f"Embed Exception: {str(e)} | URL: {conf['base_url']}")
             return build_embedding(text, self.settings.embedding_dimension)
 
     async def summarize(self, text: str, config: dict[str, str] | None = None) -> str:
@@ -300,6 +303,42 @@ class AIClient:
                 
         return None
 
+    def _translate_error(self, response: httpx.Response) -> str:
+        code = response.status_code
+        # 常见错误码翻译
+        translations = {
+            400: "请求参数错误 (Bad Request)",
+            401: "API Key无效或未授权",
+            403: "访问被拒绝 (Forbidden)",
+            404: "模型名或路径错误 (Not Found)",
+            429: "请求频率过高/达到限额",
+            500: "模型服务内部错误 (Internal Server Error)",
+            502: "网关错误 (Bad Gateway)",
+            503: "服务不可用 (Service Unavailable)",
+            504: "网关超时 (Gateway Timeout)",
+        }
+        
+        cn_msg = translations.get(code, "未知 API 错误")
+        
+        # 提取原生报错信息
+        raw_info = ""
+        try:
+            # httpx response.json() 自动处理 utf-8。
+            # 如果是智谱等厂商返回的含有 \u60a8 的字符串，json.loads 会正确反序列化为中文。
+            body = response.json()
+            if isinstance(body, dict):
+                error_obj = body.get("error")
+                if isinstance(error_obj, dict):
+                    raw_info = error_obj.get("message") or str(error_obj)
+                else:
+                    raw_info = body.get("message") or body.get("msg") or str(body)
+        except Exception:
+            raw_info = response.text[:200]
+
+        if raw_info:
+            return f"API Error {code}: {cn_msg}。详细信息: {raw_info}"
+        return f"API Error {code}: {cn_msg}"
+
     async def _chat_completion(self, prompt: str, config: dict[str, str] | None = None) -> str:
         conf = self._get_active_config(config)
         if not (conf["api_key"] and conf["base_url"]):
@@ -330,7 +369,8 @@ class AIClient:
                     self.logger.error(f"Chat CF/HTML Error: {cf_error} | URL: {conf['base_url']}")
                     return cf_error
 
-                err_msg = f"Error: {response.status_code} {response.reason_phrase} - {response.text[:200]}"
+                # Use the new global error translator
+                err_msg = self._translate_error(response)
                 self.logger.error(f"Chat Error: {err_msg} | URL: {conf['base_url']}")
                 return err_msg
             body = response.json()
@@ -344,7 +384,7 @@ class AIClient:
         conf = self._get_active_config(config)
         
         def format_sse_error(msg: str) -> str:
-            return f'data: {json.dumps({"error": msg})}\n\n'
+            return f'data: {json.dumps({"error": msg}, ensure_ascii=False)}\n\n'
 
         if not (conf["api_key"] and conf["base_url"]):
             yield format_sse_error("AI Config missing (API Key or Base URL is empty). Please check your settings.")
@@ -381,8 +421,8 @@ class AIClient:
                             yield format_sse_error(cf_error)
                             return
 
-                        err_body = response.text
-                        err_msg = f"API Error {response.status_code}: {err_body[:200]}"
+                        # Use the new global error translator
+                        err_msg = self._translate_error(response)
                         self.logger.error(f"Stream Status Error: {err_msg} | URL: {conf['base_url']}")
                         yield format_sse_error(err_msg)
                         return
