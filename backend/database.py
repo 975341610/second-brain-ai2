@@ -30,3 +30,29 @@ def get_db() -> Generator:
         yield db
     finally:
         db.close()
+
+def with_db_retry(max_retries=3, delay=1.0):
+    """Decorator to retry DB operations on OperationalError (e.g. database is locked)"""
+    import functools
+    import time
+    import random
+    from sqlalchemy.exc import OperationalError
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except OperationalError as e:
+                    if "locked" in str(e).lower():
+                        last_exc = e
+                        # Exponential backoff with jitter
+                        wait_time = delay * (2 ** attempt) + random.uniform(0, 1)
+                        time.sleep(wait_time)
+                        continue
+                    raise e
+            raise last_exc
+        return wrapper
+    return decorator

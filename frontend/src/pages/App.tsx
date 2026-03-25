@@ -258,7 +258,7 @@ export default function App() {
       )}
     </main>
     <div className="fixed bottom-4 left-4 z-50 text-[10px] text-stone-400 font-mono pointer-events-none opacity-50">
-      v0.4.8
+      v0.5.0
     </div>
     </>
   );

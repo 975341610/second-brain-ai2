@@ -86,9 +86,10 @@ ai_client = AIClient()
 
 async def background_index_note(note_id: int, title: str, content: str, tags: list[str] | None = None, icon: str = "\U0001f4dd", parent_id: int | None = None, is_title_manually_edited: bool = False):
     """异步执行 AI 处理：摘要、向量化、自动链接"""
+    db = SessionLocal()
     try:
-        with SessionLocal() as db:
-            model_config = get_or_create_model_config(db)
+        # 获取最新的 AI 配置
+        model_config = get_or_create_model_config(db)
         llm_config = {
             "provider": model_config.provider,
             "api_key": model_config.api_key,
@@ -100,7 +101,13 @@ async def background_index_note(note_id: int, title: str, content: str, tags: li
         summary = await ai_client.summarize(content, llm_config)
         
         # 2. 更新数据库摘要 (这里不需要重复传入 content 以免大并发下覆盖新数据，但后端接口通常是全量)
-        update_note(db, note_id, title=title, content=content, summary=summary, tags=tags, icon=icon, parent_id=parent_id, is_title_manually_edited=is_title_manually_edited)
+        # 引入重试机制以应对可能的 SQLite 锁竞争
+        from backend.database import with_db_retry
+        @with_db_retry(max_retries=5, delay=0.5)
+        def save_summary():
+            update_note(db, note_id, title=title, content=content, summary=summary, tags=tags, icon=icon, parent_id=parent_id, is_title_manually_edited=is_title_manually_edited)
+        
+        save_summary()
         
         # 3. 向量索引处理
         chunks = chunk_text(content, settings.chunk_size_words, settings.chunk_overlap_words)
@@ -133,11 +140,19 @@ async def background_index_note(note_id: int, title: str, content: str, tags: li
                 seen_notes.add(target_id)
         
         if link_targets:
-            replace_note_links(db, note_id, sorted(link_targets, key=lambda pair: pair[1], reverse=True)[:5])
+            @with_db_retry(max_retries=5, delay=0.5)
+            def save_links():
+                replace_note_links(db, note_id, sorted(link_targets, key=lambda pair: pair[1], reverse=True)[:5])
+            save_links()
             
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Error in background indexing note {note_id}: {str(e)}")
+        # In case of DB errors, we rollback the current session
+        db.rollback()
+    finally:
+        db.close()
+
 
 def note_to_response(note: Note) -> NoteResponse:
     links = [link.target_note_id for link in note.links_from]
@@ -164,8 +179,15 @@ def notebook_to_response(notebook: Notebook) -> NotebookResponse:
 
 async def persist_note(db: Session, title: str, content: str, background_tasks: BackgroundTasks, notebook_id: int | None = None, icon: str = "\U0001f4dd", parent_id: int | None = None, is_title_manually_edited: bool = False, tags: list[str] | None = None) -> NoteResponse:
     # 1. 快速创建数据库记录
-    notebook_id = notebook_id or get_or_create_default_notebook(db).id
-    note = create_note(db, title=title, content=content, summary="", tags=tags, notebook_id=notebook_id, icon=icon, parent_id=parent_id, is_title_manually_edited=is_title_manually_edited)
+    from backend.database import with_db_retry
+    
+    @with_db_retry(max_retries=3)
+    def do_create():
+        nonlocal notebook_id
+        notebook_id = notebook_id or get_or_create_default_notebook(db).id
+        return create_note(db, title=title, content=content, summary="", tags=tags, notebook_id=notebook_id, icon=icon, parent_id=parent_id, is_title_manually_edited=is_title_manually_edited)
+    
+    note = do_create()
     
     # 2. 异步执行 AI 任务
     background_tasks.add_task(
@@ -306,7 +328,15 @@ async def inline_ai(payload: InlineAIRequest, db: Session = Depends(get_db)):
         async for chunk in ai_client.stream_chat(messages, llm_config):
             yield chunk
     
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(
+        generate(), 
+        media_type="text/plain", 
+        headers={
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
+    )
 
 @router.post("/chat")
 async def global_chat(payload: AskRequest, db: Session = Depends(get_db)):
@@ -342,7 +372,15 @@ async def global_chat(payload: AskRequest, db: Session = Depends(get_db)):
         async for chunk in ai_client.stream_chat(messages, llm_config):
             yield chunk
             
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(
+        generate(), 
+        media_type="text/plain", 
+        headers={
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
+    )
 
 @router.post("/tags/suggest", response_model=TagSuggestResponse)
 async def suggest_tags(payload: TagSuggestRequest, db: Session = Depends(get_db)):
@@ -446,7 +484,12 @@ async def update_note_api(note_id: int, payload: NoteUpdate, background_tasks: B
     tags = payload.tags
     
     # 同步更新数据库
-    note = update_note(db, note_id, title, content, existing.summary, tags, icon, parent_id, is_title_manually_edited)
+    from backend.database import with_db_retry
+    @with_db_retry(max_retries=3)
+    def do_update():
+        return update_note(db, note_id, title, content, existing.summary, tags, icon, parent_id, is_title_manually_edited)
+    
+    note = do_update()
     
     # 2. 异步执行 AI 后台任务
     background_tasks.add_task(

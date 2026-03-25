@@ -30,7 +30,13 @@ class AIClient:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.logger = get_ai_logger()
-        self.client = httpx.AsyncClient(timeout=30.0, trust_env=True)
+        # 优化连接池：增加最大连接数和保持存活的连接数，提升并发稳定性
+        limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+        # 注意：在某些环境中 trust_env=True 可能会因为环境变量解析失败导致启动崩溃
+        try:
+            self.client = httpx.AsyncClient(timeout=60.0, trust_env=True, limits=limits)
+        except Exception:
+            self.client = httpx.AsyncClient(timeout=60.0, trust_env=False, limits=limits)
 
     def _get_active_config(self, config: dict[str, str] | None = None) -> dict[str, str]:
         active = config or {}
@@ -206,19 +212,26 @@ class AIClient:
                 async with self.client.stream("POST", f"{conf['base_url']}/chat/completions", headers=headers, json=payload, timeout=60.0) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
-                        if not line or not line.startswith("data: "):
+                        line = line.strip()
+                        if not line or not line.startswith("data:"):
                             continue
-                        # Remove 'data: ' prefix
-                        content_str = line[6:].strip()
+                        
+                        # 兼容 data: 和 data: (空格) 两种格式
+                        content_str = line[5:].strip()
                         if content_str == "[DONE]":
                             break
+                        
                         try:
                             data = json.loads(content_str)
-                            delta = data.get("choices", [{}])[0].get("delta", {})
+                            choices = data.get("choices", [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
                                 yield content
-                        except Exception:
+                        except json.JSONDecodeError:
+                            self.logger.warning(f"Failed to parse SSE line: {line}")
                             continue
                 return # Exit on success
             except Exception as e:
