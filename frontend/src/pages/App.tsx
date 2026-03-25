@@ -83,6 +83,7 @@ export default function App() {
     deleteChatSession,
     notify,
     clearToast,
+    userStats,
   } = useAppStore();
 
   useEffect(() => {
@@ -219,6 +220,7 @@ export default function App() {
               modelConfig={modelConfig} 
               sessions={chatSessions} 
               activeSessionId={activeChatSessionId} 
+              userStats={userStats}
               onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} 
               onAsk={askStreamingAssistant} 
               onCreateTask={createTask} 

@@ -13,6 +13,12 @@ except ImportError:
     webview = None
 
 import uvicorn
+import tkinter as tk
+from tkinter import messagebox
+import requests
+import keyboard
+from plyer import notification
+
 
 # ============================================================
 # 🔧 ChromaDB PyInstaller 最终修复 (v0.3.36)
@@ -101,6 +107,73 @@ if __name__ == "__main__":
         )
 
     threading.Thread(target=run_api, daemon=True).start()
+
+    # ============================================================
+    # 📝 全局灵感捕获 (Quick Capture)
+    # ============================================================
+    
+    def show_quick_capture():
+        """弹出 Tkinter 输入框"""
+        root = tk.Tk()
+        root.title("灵感捕获")
+        
+        # 窗口样式：无边框、置顶
+        root.overrideredirect(True)
+        root.attributes("-topmost", True)
+        
+        # 居中显示
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        width, height = 500, 60
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 3
+        root.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # 简易输入框
+        frame = tk.Frame(root, bg="#2d2d2d", highlightthickness=2, highlightbackground="#3d3d3d")
+        frame.pack(fill="both", expand=True)
+        
+        entry = tk.Entry(frame, bg="#2d2d2d", fg="white", font=("Arial", 16), insertbackground="white", borderwidth=0)
+        entry.pack(fill="x", padx=15, pady=15)
+        entry.focus_set()
+        
+        def submit(event=None):
+            content = entry.get().strip()
+            if content:
+                try:
+                    port = os.environ.get("PORT", "8765")
+                    resp = requests.post(f"http://127.0.0.1:{port}/api/notes/quick-capture", json={"content": content}, timeout=3)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        exp = data.get("exp_gained", 10)
+                        # 系统通知 (plyer)
+                        notification.notify(
+                            title="灵感已捕获！",
+                            message=f"灵感已飞向收集箱。经验值 +{exp}",
+                            app_name="Second Brain AI",
+                            timeout=3
+                        )
+                except Exception as e:
+                    print(f"[!] Quick capture error: {str(e)}")
+            root.destroy()
+
+        def cancel(event=None):
+            root.destroy()
+
+        # 绑定热键
+        entry.bind("<Return>", submit)
+        entry.bind("<Escape>", cancel)
+        
+        root.mainloop()
+
+    def setup_hotkeys():
+        """在后台注册全局快捷键"""
+        print("[*] Registering global hotkey: Ctrl+Alt+N")
+        keyboard.add_hotkey("ctrl+alt+n", lambda: threading.Thread(target=show_quick_capture, daemon=True).start())
+        keyboard.wait()
+
+    # 在单独线程运行快捷键监听
+    threading.Thread(target=setup_hotkeys, daemon=True).start()
 
     # 启动前端窗口
     if webview:

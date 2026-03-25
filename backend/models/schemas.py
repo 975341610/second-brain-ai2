@@ -193,3 +193,24 @@ class NotebookResponse(BaseModel):
 class TrashResponse(BaseModel):
     notes: list[NoteResponse]
     notebooks: list[NotebookResponse]
+
+
+class QuickCaptureRequest(BaseModel):
+    content: str
+
+
+class QuickCaptureResponse(BaseModel):
+    status: str
+    note: NoteResponse
+    exp_gained: int
+    current_exp: int
+    current_level: int
+
+
+class UserStatsResponse(BaseModel):
+    exp: int
+    level: int
+    total_captures: int
+
+    class Config:
+        from_attributes = True

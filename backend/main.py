@@ -113,6 +113,10 @@ def run_migrations() -> None:
             connection.execute(text("ALTER TABLE tasks ADD COLUMN task_type VARCHAR(50) DEFAULT 'work'"))
         if "deadline" not in task_columns:
             connection.execute(text("ALTER TABLE tasks ADD COLUMN deadline DATETIME"))
+        
+        # UserStats migration
+        if "user_stats" not in inspector.get_table_names():
+            connection.execute(text("CREATE TABLE user_stats (id INTEGER PRIMARY KEY, exp INTEGER DEFAULT 0, level INTEGER DEFAULT 1, total_captures INTEGER DEFAULT 0, updated_at DATETIME)"))
 
 
 @app.on_event("startup")

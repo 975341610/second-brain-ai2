@@ -5,10 +5,11 @@ from datetime import datetime
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from backend.models.db_models import ModelConfig, Note, Notebook, NoteLink, NoteProperty, Task, deobfuscate, obfuscate
+from backend.models.db_models import ModelConfig, Note, Notebook, NoteLink, NoteProperty, Task, UserStats, deobfuscate, obfuscate
 
 
 DEFAULT_NOTEBOOK_NAME = "快速笔记"
+INBOX_NOTEBOOK_NAME = "收集箱(Inbox)"
 
 
 def list_notebooks(db: Session) -> list[Notebook]:
@@ -438,3 +439,46 @@ def update_model_config(db: Session, provider: str, api_key: str, base_url: str,
     db.commit()
     db.refresh(config)
     return get_or_create_model_config(db)
+
+
+def get_or_create_inbox_notebook(db: Session) -> Notebook:
+    notebook = db.scalar(select(Notebook).where(Notebook.name == INBOX_NOTEBOOK_NAME))
+    if notebook:
+        if notebook.deleted_at is not None:
+            notebook.deleted_at = None
+            db.add(notebook)
+            db.commit()
+            db.refresh(notebook)
+        return notebook
+    notebook = Notebook(name=INBOX_NOTEBOOK_NAME, icon="📥")
+    db.add(notebook)
+    db.commit()
+    db.refresh(notebook)
+    return notebook
+
+
+def get_or_create_user_stats(db: Session) -> UserStats:
+    stats = db.get(UserStats, 1)
+    if not stats:
+        stats = UserStats(id=1, exp=0, level=1, total_captures=0)
+        db.add(stats)
+        db.commit()
+        db.refresh(stats)
+    return stats
+
+
+def add_exp(db: Session, amount: int) -> UserStats:
+    stats = get_or_create_user_stats(db)
+    stats.exp += amount
+    stats.total_captures += 1
+    
+    # Simple level up logic: level = floor(sqrt(exp / 100)) + 1
+    import math
+    new_level = math.floor(math.sqrt(stats.exp / 100)) + 1
+    if new_level > stats.level:
+        stats.level = new_level
+        
+    db.add(stats)
+    db.commit()
+    db.refresh(stats)
+    return stats

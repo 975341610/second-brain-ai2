@@ -111,3 +111,13 @@ class ModelConfig(Base):
     base_url: Mapped[str] = mapped_column(String(255), default="")
     model_name: Mapped[str] = mapped_column(String(255), default="glm-4.7-flash")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserStats(Base):
+    __tablename__ = "user_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    exp: Mapped[int] = mapped_column(Integer, default=0)
+    level: Mapped[int] = mapped_column(Integer, default=1)
+    total_captures: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

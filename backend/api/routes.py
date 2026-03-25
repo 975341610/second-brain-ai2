@@ -27,6 +27,8 @@ from backend.models.schemas import (
     NotePropertyUpdate,
     NoteResponse,
     NoteUpdate,
+    QuickCaptureRequest,
+    QuickCaptureResponse,
     SearchRequest,
     TagSuggestRequest,
     TagSuggestResponse,
@@ -35,6 +37,7 @@ from backend.models.schemas import (
     TaskUpdate,
     TrashResponse,
     UploadResponse,
+    UserStatsResponse,
 )
 from backend.database import get_db, SessionLocal
 from backend.utils import log_buffer
@@ -45,6 +48,7 @@ from backend.rag.pipeline import citations_from_results, cosine_similarity, sear
 from backend.services.ai_client import AIClient
 from backend.services.document_service import chunk_text, parse_document
 from backend.services.repositories import (
+    add_exp,
     create_note,
     create_notebook,
     create_note_property,
@@ -55,7 +59,9 @@ from backend.services.repositories import (
     get_note,
     get_note_properties,
     get_or_create_default_notebook,
+    get_or_create_inbox_notebook,
     get_or_create_model_config,
+    get_or_create_user_stats,
     list_notes,
     list_notebooks,
     list_trashed_notes,
@@ -197,6 +203,35 @@ async def persist_note(db: Session, title: str, content: str, background_tasks: 
     )
     
     return note_to_response(note)
+
+@router.post("/notes/quick-capture", response_model=QuickCaptureResponse)
+async def quick_capture_api(payload: QuickCaptureRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> QuickCaptureResponse:
+    from datetime import datetime
+    title = f"灵感碎片 - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    
+    # 1. 确保 Inbox 笔记本存在
+    inbox = get_or_create_inbox_notebook(db)
+    
+    # 2. 持久化笔记
+    note_resp = await persist_note(db, title, payload.content, background_tasks, notebook_id=inbox.id, icon="⚡")
+    
+    # 3. 增加 EXP
+    exp_gained = 10
+    stats = add_exp(db, exp_gained)
+    
+    return QuickCaptureResponse(
+        status="success",
+        note=note_resp,
+        exp_gained=exp_gained,
+        current_exp=stats.exp,
+        current_level=stats.level
+    )
+
+@router.get("/user/stats", response_model=UserStatsResponse)
+def get_user_stats_api(db: Session = Depends(get_db)) -> UserStatsResponse:
+    stats = get_or_create_user_stats(db)
+    return UserStatsResponse.model_validate(stats)
+
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_documents(background_tasks: BackgroundTasks, files: list[UploadFile] = File(...), db: Session = Depends(get_db)) -> UploadResponse:

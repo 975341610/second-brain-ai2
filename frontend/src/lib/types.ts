@@ -95,3 +95,9 @@ export type ToastMessage = {
   tone: 'success' | 'error' | 'info';
   text: string;
 };
+
+export type UserStats = {
+  exp: number;
+  level: number;
+  total_captures: number;
+};

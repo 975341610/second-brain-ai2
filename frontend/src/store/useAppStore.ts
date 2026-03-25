@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { openDB, type IDBPDatabase } from 'idb';
 import { api } from '../lib/api';
-import type { AskResponse, ChatMessage, ChatSession, ModelConfig, Note, Notebook, Task, ToastMessage, TrashState, Citation } from '../lib/types';
+import type { AskResponse, ChatMessage, ChatSession, ModelConfig, Note, Notebook, Task, ToastMessage, TrashState, Citation, UserStats } from '../lib/types';
+
 
 const CHAT_STORAGE_KEY = 'second-brain-chat-sessions';
+
 const DB_NAME = 'second-brain-offline';
 const STORE_NOTES = 'notes';
 const STORE_NOTEBOOKS = 'notebooks';
@@ -117,6 +119,7 @@ type AppState = {
   gitCommit: string;
   buildTime: string;
   exePath: string;
+  userStats: UserStats | null;
   loadInitialData: () => Promise<void>;
     selectNote: (noteId: number) => void;
     createDraftNote: (notebookId?: number | null, parentId?: number | null) => void;
@@ -180,6 +183,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   gitCommit: 'unknown',
   buildTime: 'unknown',
   exePath: 'unknown',
+  userStats: null,
   loadInitialData: async () => {
     // 优先从缓存加载，实现离线瞬间看到内容
     const [cachedNotes, cachedNotebooks, cachedTasks] = await Promise.all([
@@ -199,13 +203,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ loading: true });
     try {
-      const [notes, notebooks, tasks, modelConfig, trash, versionData] = await Promise.all([
+      const [notes, notebooks, tasks, modelConfig, trash, versionData, userStats] = await Promise.all([
         api.listNotes(),
         api.listNotebooks(),
         api.listTasks(),
         api.getModelConfig(),
         api.getTrash(),
-        api.getSystemVersion()
+        api.getSystemVersion(),
+        api.getUserStats()
       ]);
 
       // 异步更新缓存
@@ -219,6 +224,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         tasks,
         trash,
         modelConfig,
+        userStats,
         appVersion: versionData?.version || get().appVersion,
         gitCommit: versionData?.git_commit || 'unknown',
         buildTime: versionData?.build_time || 'unknown',

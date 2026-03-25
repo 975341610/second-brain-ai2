@@ -1,6 +1,8 @@
-import type { AskResponse, ModelConfig, Note, Notebook, NoteProperty, Task, TrashState } from './types';
+import type { AskResponse, ModelConfig, Note, Notebook, NoteProperty, Task, TrashState, UserStats } from './types';
+
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('access_token');
@@ -190,4 +192,5 @@ export const api = {
   performUpdate: () => request<{ status: string; output: string }>('/system/update?force=true', { method: 'POST' }),
   getSystemVersion: () => request<{ version: string; git_commit?: string; build_time?: string; executable?: string }>('/system/version'),
   restartApp: () => request<{ status: string; message: string }>('/system/restart', { method: 'POST' }),
+  getUserStats: () => request<UserStats>('/user/stats'),
 };
