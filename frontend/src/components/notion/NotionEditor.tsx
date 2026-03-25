@@ -89,9 +89,11 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const [propertyMenuNode, setPropertyMenuNode] = useState<{ pos: number; rect: DOMRect } | null>(null);
   const [activeTableRect, setActiveTableRect] = useState<DOMRect | null>(null);
   const [activeRowRect, setActiveRowRect] = useState<DOMRect | null>(null);
+  const [hoveredRowEdge, setHoveredRowEdge] = useState<{ index: number; side: 'top' | 'bottom'; rect: DOMRect } | null>(null);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   
   // Use a ref to track the last hovered elements to avoid redundant state updates
-  const lastHoveredRef = useRef<{ table: HTMLElement | null; tr: HTMLElement | null }>({ table: null, tr: null });
+  const lastHoveredRef = useRef<{ table: HTMLElement | null; tr: HTMLElement | null; edge: 'top' | 'bottom' | null }>({ table: null, tr: null, edge: null });
   
   const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
   const editorRef = useRef<any>(null);
@@ -373,22 +375,48 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       // 寻找表格和行
       const table = target.closest('table');
       const tr = target.closest('tr');
+      const edgeThreshold = 8; // 8px 感应区
+
+      let currentEdge: 'top' | 'bottom' | null = null;
+      let rowIndex = -1;
+      let rowRect: DOMRect | null = null;
+
+      if (tr) {
+        rowRect = tr.getBoundingClientRect();
+        const yOffset = e.clientY - rowRect.top;
+        if (yOffset < edgeThreshold) currentEdge = 'top';
+        else if (yOffset > rowRect.height - edgeThreshold) currentEdge = 'bottom';
+        
+        // 获取行索引
+        const tbody = tr.parentElement;
+        if (tbody) {
+          rowIndex = Array.from(tbody.children).indexOf(tr);
+        }
+      }
 
       // Check if the hovered elements have actually changed before updating state
-      if (table !== lastHoveredRef.current.table || tr !== lastHoveredRef.current.tr) {
-        lastHoveredRef.current = { table, tr };
+      if (table !== lastHoveredRef.current.table || tr !== lastHoveredRef.current.tr || currentEdge !== lastHoveredRef.current.edge) {
+        lastHoveredRef.current = { table, tr, edge: currentEdge };
         
         if (table) {
           setActiveTableRect(table.getBoundingClientRect());
-          if (tr) {
+          if (tr && currentEdge) {
+            setHoveredRowEdge({ index: rowIndex, side: currentEdge, rect: rowRect! });
+            setActiveRowRect(null); // 隐藏常规行操作（如果有的话）
+          } else if (tr) {
             setActiveRowRect(tr.getBoundingClientRect());
+            setHoveredRowEdge(null);
+          } else {
+            setActiveRowRect(null);
+            setHoveredRowEdge(null);
           }
         } else {
           // 如果不在表格内，检查是否在控制按钮内
-          const isOverControls = target.closest('.table-controls-container');
+          const isOverControls = target.closest('.table-controls-container') || target.closest('.row-edge-handle');
           if (!isOverControls) {
             setActiveTableRect(null);
             setActiveRowRect(null);
+            setHoveredRowEdge(null);
           }
         }
       }
@@ -396,9 +424,30 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
     const handleUpdate = () => {
       if (!editorRef.current) return;
+      
+      // 在执行 UI 更新前，确保选区合法。
+      // 如果删除行导致选区在 tr 上而不是 td 里的内容，尝试将其移动到合法的文本选区
+      const { selection } = editor.state;
+      if (selection instanceof TextSelection && selection.$cursor === null) {
+        // 如果没有光标（可能是选中了整个节点），且在表格中
+        const $from = selection.$from;
+        if ($from.parent.type.name === 'tableRow') {
+          // 选区落在 tr 上了，Tiptap 会抛出错误。
+          // 我们强制尝试寻找该行内的第一个 td 中的第一个 p 插入点
+          try {
+            const row = $from.parent;
+            if (row.firstChild) {
+              const firstCellPos = $from.pos + 1; // 假设在 tr 内部
+              editor.commands.setTextSelection(firstCellPos);
+            }
+          } catch (e) {
+            // 忽略恢复失败
+          }
+        }
+      }
+
       updateTableRect();
       
-      const { selection } = editor.state;
       const { $from } = selection;
       let foundHeader = false;
       for (let i = $from.depth; i > 0; i--) {
@@ -706,7 +755,6 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 left: activeTableRect.left,
                 width: activeTableRect.width,
                 height: activeTableRect.height,
-                pointerEvents: 'none'
               }}
             >
               {/* 快速添加列按钮 (右侧) */}
@@ -717,7 +765,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                     editor.chain().focus().addColumnAfter().run();
                   }}
                   onMouseDown={(e) => e.preventDefault()}
-                  className="w-5 h-5 flex items-center justify-center bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 hover:scale-110 transition-all"
+                  className="w-5 h-5 flex items-center justify-center bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 hover:scale-110 transition-all opacity-0 group-hover/editor:opacity-100"
                   title="添加列"
                 >
                   <Plus size={14} />
@@ -732,7 +780,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                     editor.chain().focus().addRowAfter().run();
                   }}
                   onMouseDown={(e) => e.preventDefault()}
-                  className="w-5 h-5 flex items-center justify-center bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 hover:scale-110 transition-all"
+                  className="w-5 h-5 flex items-center justify-center bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600 hover:scale-110 transition-all opacity-0 group-hover/editor:opacity-100"
                   title="添加行"
                 >
                   <Plus size={14} />
@@ -741,7 +789,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
               {/* 表格操作菜单手柄 (左侧) */}
               <div className="absolute top-0 bottom-0 -left-6 w-6 flex flex-col items-center pt-1 pointer-events-auto">
-                <div className="flex flex-col gap-1 transition-opacity">
+                <div className="flex flex-col gap-1 transition-opacity opacity-0 group-hover/editor:opacity-100">
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -756,19 +804,49 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                 </div>
               </div>
 
-              {/* 行操作柄 - 仅当有活动行时显示 */}
-              {activeRowRect && (
+              {/* 行边缘高亮指示器 */}
+              {hoveredRowEdge && (
+                <div 
+                  className="row-edge-handle absolute left-0 right-0 h-1 bg-blue-400/50 cursor-pointer pointer-events-auto transition-all"
+                  style={{
+                    top: (hoveredRowEdge.side === 'top' ? hoveredRowEdge.rect.top : hoveredRowEdge.rect.bottom) - activeTableRect.top - 0.5,
+                  }}
+                  onClick={() => setSelectedRowIndex(hoveredRowEdge.index)}
+                />
+              )}
+
+              {/* 行操作菜单 - 当点击边缘或常规悬停时显示 */}
+              {(activeRowRect || hoveredRowEdge) && (
                 <div 
                   className="absolute -left-12 w-10 flex items-center justify-end gap-1 pointer-events-auto transition-all duration-150"
                   style={{
-                    top: activeRowRect.top - activeTableRect.top,
-                    height: activeRowRect.height,
+                    top: (hoveredRowEdge ? hoveredRowEdge.rect.top : activeRowRect!.top) - activeTableRect.top,
+                    height: (hoveredRowEdge ? hoveredRowEdge.rect.height : activeRowRect!.height),
                   }}
                 >
                   <button
                     onClick={(e) => {
                       e.preventDefault();
-                      editor.chain().focus().deleteRow().run();
+                      // 确保有合法的索引
+                      const idx = hoveredRowEdge ? hoveredRowEdge.index : -1;
+                      if (idx !== -1) {
+                         editor.chain().focus().command(({ tr, state }) => {
+                           // 找到对应的 tr 节点
+                           const tableDOM = activeTableRect ? document.elementFromPoint(activeTableRect.left + 5, activeTableRect.top + 5)?.closest('table') : null;
+                           if (tableDOM) {
+                             const rows = tableDOM.querySelectorAll('tr');
+                             const targetRow = rows[idx];
+                             if (targetRow) {
+                               const pos = editor.view.posAtDOM(targetRow, 0);
+                               tr.delete(pos, pos + editor.state.doc.nodeAt(pos)!.nodeSize);
+                               return true;
+                             }
+                           }
+                           return false;
+                         }).run();
+                      } else {
+                        editor.chain().focus().deleteRow().run();
+                      }
                     }}
                     onMouseDown={(e) => e.preventDefault()}
                     className="w-5 h-5 flex items-center justify-center bg-white border border-stone-200 text-stone-400 rounded-md hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all shadow-sm"
@@ -780,16 +858,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                     draggable
                     onDragStart={(e) => {
                       // 获取当前行的索引
-                      const selection = editor.state.selection;
-                      const { $from } = selection;
-                      let rowIndex = -1;
-                      for (let i = $from.depth; i > 0; i--) {
-                        if ($from.node(i).type.name === 'tableRow') {
-                          // 获取行在父表格中的索引
-                          rowIndex = $from.index(i-1);
-                          break;
-                        }
-                      }
+                      const rowIndex = hoveredRowEdge ? hoveredRowEdge.index : -1;
                       if (rowIndex !== -1) {
                         setDraggedRowIndex(rowIndex);
                         // 设置拖拽预览
@@ -803,20 +872,17 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                     }}
                     onDrop={(e) => {
                       e.preventDefault();
+                      if (draggedRowIndex === null) return;
+
                       // 获取落点的行索引
-                      const rect = editor.view.dom.getBoundingClientRect();
-                      const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-                      if (pos && draggedRowIndex !== null) {
-                        const $pos = editor.state.doc.resolve(pos.pos);
-                        let targetRowIndex = -1;
-                        for (let i = $pos.depth; i > 0; i--) {
-                          if ($pos.node(i).type.name === 'tableRow') {
-                            targetRowIndex = $pos.index(i-1);
-                            break;
+                      const tr = (e.target as HTMLElement).closest('tr') || document.elementFromPoint(e.clientX, e.clientY)?.closest('tr');
+                      if (tr) {
+                        const tbody = tr.parentElement;
+                        if (tbody) {
+                          const targetRowIndex = Array.from(tbody.children).indexOf(tr);
+                          if (targetRowIndex !== -1 && targetRowIndex !== draggedRowIndex) {
+                            moveRow(draggedRowIndex, targetRowIndex);
                           }
-                        }
-                        if (targetRowIndex !== -1 && targetRowIndex !== draggedRowIndex) {
-                          moveRow(draggedRowIndex, targetRowIndex);
                         }
                       }
                       setDraggedRowIndex(null);

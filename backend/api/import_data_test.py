@@ -59,3 +59,16 @@ def test_import_data_missing_db(tmp_path):
     # Verify response
     assert response.status_code == 400
     assert "second_brain.db not found" in response.json()["detail"]
+
+def test_import_data_same_path():
+    # Call import-data endpoint with source_path == data_root
+    data_root = settings.data_root.resolve()
+    # Ensure data_root exists and contains second_brain.db for validation to pass
+    data_root.mkdir(parents=True, exist_ok=True)
+    (data_root / "second_brain.db").write_text("mock database")
+    
+    response = client.post("/api/system/import-data", json={"source_path": str(data_root)})
+    
+    # Verify response
+    assert response.status_code == 400
+    assert "选择的导入目录与当前数据目录相同，无需导入" in response.json()["detail"]

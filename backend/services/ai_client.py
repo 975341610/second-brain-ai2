@@ -32,11 +32,17 @@ class AIClient:
         self.logger = get_ai_logger()
         # 优化连接池：增加最大连接数和保持存活的连接数，提升并发稳定性
         limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+        
+        # 禁用 SSL 验证以兼容各种代理环境 (针对打包后的证书问题)
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        verify = False
+        
         # 注意：在某些环境中 trust_env=True 可能会因为环境变量解析失败导致启动崩溃
         try:
-            self.client = httpx.AsyncClient(timeout=60.0, trust_env=True, limits=limits)
+            self.client = httpx.AsyncClient(timeout=60.0, trust_env=True, limits=limits, verify=verify)
         except Exception:
-            self.client = httpx.AsyncClient(timeout=60.0, trust_env=False, limits=limits)
+            self.client = httpx.AsyncClient(timeout=60.0, trust_env=False, limits=limits, verify=verify)
 
     def _get_active_config(self, config: dict[str, str] | None = None) -> dict[str, str]:
         active = config or {}

@@ -763,7 +763,9 @@ async def import_data(payload: dict):
     if not db_file.exists():
         raise HTTPException(status_code=400, detail=f"second_brain.db not found in {source_path_str}")
 
-    target_path = settings.data_root
+    target_path = settings.data_root.resolve()
+    if source_path == target_path:
+        raise HTTPException(status_code=400, detail="选择的导入目录与当前数据目录相同，无需导入")
     
     try:
         # 1. 释放当前数据库连接
@@ -781,12 +783,16 @@ async def import_data(payload: dict):
                 continue
                 
             dest_item = target_path / item_name
-            if src_item.is_dir():
-                # 目录覆盖
-                shutil.copytree(src_item, dest_item, dirs_exist_ok=True)
-            else:
-                # 文件覆盖
-                shutil.copy2(src_item, dest_item)
+            try:
+                if src_item.is_dir():
+                    # 目录覆盖
+                    shutil.copytree(src_item, dest_item, dirs_exist_ok=True)
+                else:
+                    # 文件覆盖
+                    shutil.copy2(src_item, dest_item)
+            except shutil.SameFileError:
+                # 即使路径没被前面的 == 判定出来（例如软链接），这里也能兜底
+                continue
                 
         return {"status": "ok", "message": "Import successful. Please restart the app."}
     except Exception as e:

@@ -173,7 +173,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isUploading: false,
   toast: null,
   modelConfig: defaultModelConfig,
-  appVersion: 'v0.5.2', // 默认版本，加载后会被覆盖
+  appVersion: 'v0.5.3', // 默认版本，加载后会被覆盖
   loadInitialData: async () => {
     // 优先从缓存加载，实现离线瞬间看到内容
     const [cachedNotes, cachedNotebooks, cachedTasks] = await Promise.all([
