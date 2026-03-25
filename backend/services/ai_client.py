@@ -18,7 +18,7 @@ def get_ai_logger():
     log_file = settings.data_root / "ai_error.log"
     logger = logging.getLogger("ai_client")
     if not logger.handlers:
-        logger.setLevel(logging.ERROR)
+        logger.setLevel(logging.WARNING)
         fh = logging.FileHandler(log_file, encoding="utf-8")
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         fh.setFormatter(formatter)
@@ -207,21 +207,43 @@ class AIClient:
             "stream": True,
         }
         
+        first_token_timeout = 15.0 # Increased for stability
+        
         for attempt in range(3):
             try:
                 async with self.client.stream("POST", f"{conf['base_url']}/chat/completions", headers=headers, json=payload, timeout=60.0) as response:
                     response.raise_for_status()
-                    async for line in response.aiter_lines():
+                    
+                    got_first_token = False
+                    lines_iter = response.aiter_lines()
+                    
+                    while True:
+                        try:
+                            if not got_first_token:
+                                line = await asyncio.wait_for(anext(lines_iter), timeout=first_token_timeout)
+                            else:
+                                line = await anext(lines_iter)
+                        except (asyncio.TimeoutError, TimeoutError):
+                            raise Exception(f"First token timeout after {first_token_timeout}s")
+                        except StopAsyncIteration:
+                            break
+                        
                         line = line.strip()
-                        if not line or not line.startswith("data:"):
+                        if not line:
                             continue
                         
-                        # 兼容 data: 和 data: (空格) 两种格式
-                        content_str = line[5:].strip()
+                        # Compatible with both SSE (data: {JSON}) and JSONL ({JSON})
+                        content_str = line
+                        if line.startswith("data:"):
+                            content_str = line[5:].strip()
+                        
                         if content_str == "[DONE]":
                             break
                         
                         try:
+                            if not content_str.startswith("{"):
+                                continue
+                                
                             data = json.loads(content_str)
                             choices = data.get("choices", [])
                             if not choices:
@@ -229,15 +251,18 @@ class AIClient:
                             delta = choices[0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
+                                got_first_token = True
                                 yield content
                         except json.JSONDecodeError:
-                            self.logger.warning(f"Failed to parse SSE line: {line}")
+                            if line.startswith("data:"):
+                                self.logger.warning(f"Failed to parse SSE line: {line}")
                             continue
-                return # Exit on success
+                return # Success
             except Exception as e:
                 if attempt == 2:
                     self.logger.error(f"Stream Error: {str(e)} | URL: {conf['base_url']}")
                     yield f"Error: {str(e)}"
                 else:
+                    self.logger.warning(f"Stream attempt {attempt+1} failed: {str(e)}. Retrying...")
                     await asyncio.sleep(1)
                     continue
