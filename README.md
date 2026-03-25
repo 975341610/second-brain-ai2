@@ -21,7 +21,8 @@ Production-style MVP for a local-first AI second brain with notes, RAG search, c
 
 ## Versions
 
-- `v0.5.3`: (Current) fix: AI SSL certificate verification, robust import validation, and elegant table row drag UX.
+- `v0.5.4`: (Current) fix: remove table row drag UX and bump version.
+- `v0.5.3`: fix: AI SSL certificate verification, robust import validation, and elegant table row drag UX.
 - `v0.5.2`: Diagnostic fixes for update persistence, taskkill integration, and robocopy verification.
 - `v0.5.1`: Robust AI stream parsing, Table TDD fixes, and improved fast update logic.
 - `v0.5.0`: Initial system fix release.

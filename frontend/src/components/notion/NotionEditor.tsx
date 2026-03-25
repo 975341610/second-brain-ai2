@@ -43,8 +43,6 @@ import {
   Bookmark as BookMarked
 } from 'lucide-react';
 
-import { moveTableRow } from './tableCommands';
-
 interface NotionEditorProps {
   note: Note | null;
   notes: Note[];
@@ -95,17 +93,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   // Use a ref to track the last hovered elements to avoid redundant state updates
   const lastHoveredRef = useRef<{ table: HTMLElement | null; tr: HTMLElement | null }>({ table: null, tr: null });
   
-  const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
   const editorRef = useRef<any>(null);
-
-  const moveRow = useCallback((fromIndex: number, toIndex: number) => {
-    const currentEditor = editorRef.current;
-    if (!currentEditor || fromIndex === toIndex) return;
-
-    currentEditor.commands.command(({ tr, state }: any) => {
-      return moveTableRow(tr, state, fromIndex, toIndex);
-    });
-  }, []);
 
   const updateTableRect = useCallback(() => {
     const currentEditor = editorRef.current;
@@ -813,52 +801,9 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
                       >
                         <Trash2 size={14} />
                       </button>
-                      <div 
-                        draggable
-                        onDragStart={(e) => {
-                          if (hoveredRowIndex !== null) {
-                            setDraggedRowIndex(hoveredRowIndex);
-                            e.dataTransfer.setData('text/plain', hoveredRowIndex.toString());
-                            e.dataTransfer.effectAllowed = 'move';
-                            
-                            // 拖拽开始时隐藏控制图标
-                            setClickedRowIndex(null);
-                          }
-                        }}
-                        onDragEnd={() => setDraggedRowIndex(null)}
-                        className="w-7 h-7 flex items-center justify-center text-stone-400 hover:bg-stone-100 rounded cursor-grab active:cursor-grabbing"
-                        title="按住拖拽排序"
-                      >
-                        <GripVertical size={14} />
-                      </div>
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* 拖拽放置目标感应器 */}
-              {draggedRowIndex !== null && activeTableRect && (
-                <div 
-                  className="absolute inset-0 pointer-events-auto"
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const tr = (e.target as HTMLElement).closest('tr') || document.elementFromPoint(e.clientX, e.clientY)?.closest('tr');
-                    if (tr) {
-                      const tbody = tr.parentElement;
-                      if (tbody) {
-                        const targetRowIndex = Array.from(tbody.children).indexOf(tr);
-                        if (targetRowIndex !== -1 && targetRowIndex !== draggedRowIndex) {
-                          moveRow(draggedRowIndex, targetRowIndex);
-                        }
-                      }
-                    }
-                    setDraggedRowIndex(null);
-                  }}
-                />
               )}
             </div>,
             document.body
