@@ -159,6 +159,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ data_path: dataPath }),
   }),
+  importData: (sourcePath: string) => request<{ status: string; message: string }>('/system/import-data', {
+    method: 'POST',
+    body: JSON.stringify({ source_path: sourcePath }),
+  }),
   checkUpdate: () => request<{ status: string; output: string }>('/system/update', { method: 'POST' }),
   performUpdate: () => request<{ status: string; output: string }>('/system/update?force=true', { method: 'POST' }),
   getSystemVersion: () => request<{ version: string }>('/system/version'),

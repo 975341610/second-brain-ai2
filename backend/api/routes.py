@@ -740,6 +740,54 @@ async def system_update(force: bool = False):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/system/import-data")
+async def import_data(payload: dict):
+    """从本地目录导入数据并覆盖当前数据"""
+    from backend.database import engine
+    source_path_str = payload.get("source_path")
+    if not source_path_str:
+        raise HTTPException(status_code=400, detail="Missing source_path")
+    
+    source_path = Path(source_path_str).resolve()
+    if not source_path.exists() or not source_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Invalid source path: {source_path_str}")
+    
+    # 验证是否包含核心数据库文件
+    db_file = source_path / "second_brain.db"
+    if not db_file.exists():
+        raise HTTPException(status_code=400, detail=f"second_brain.db not found in {source_path_str}")
+
+    target_path = settings.data_root
+    
+    try:
+        # 1. 释放当前数据库连接
+        engine.dispose()
+        
+        # 2. 覆盖数据
+        print(f"[*] Importing data from {source_path} to {target_path}...")
+        
+        # 定义需要迁移的项目
+        items_to_import = ["second_brain.db", "chroma_store", "uploads", "sample_docs"]
+        
+        for item_name in items_to_import:
+            src_item = source_path / item_name
+            if not src_item.exists():
+                continue
+                
+            dest_item = target_path / item_name
+            if src_item.is_dir():
+                # 目录覆盖
+                shutil.copytree(src_item, dest_item, dirs_exist_ok=True)
+            else:
+                # 文件覆盖
+                shutil.copy2(src_item, dest_item)
+                
+        return {"status": "ok", "message": "Import successful. Please restart the app."}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to import data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to import data: {str(e)}")
+
 @router.post("/system/restart")
 async def system_restart():
     """执行 fast_update.bat 脚本"""

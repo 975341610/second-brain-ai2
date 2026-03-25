@@ -11,6 +11,7 @@ type SettingsPanelProps = {
 export function SettingsPanel({ modelConfig, onUpdateModelConfig }: SettingsPanelProps) {
   const [config, setConfig] = useState(modelConfig);
   const [dataPath, setDataPath] = useState('');
+  const [importPath, setImportPath] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'up-to-date' | 'pending' | 'updating' | 'success' | 'error'>('idle');
@@ -93,6 +94,19 @@ export function SettingsPanel({ modelConfig, onUpdateModelConfig }: SettingsPane
     }
   };
 
+  const handleImportData = async () => {
+    if (!importPath) return;
+    const confirmed = window.confirm('危险操作：此操作将不可逆地覆盖当前所有数据！\n确定要继续吗？');
+    if (!confirmed) return;
+
+    try {
+      const res = await api.importData(importPath);
+      alert('数据导入成功！请彻底关闭并重新启动软件以生效。');
+    } catch (e: any) {
+      alert('数据导入失败: ' + e.message);
+    }
+  };
+
   return (
     <section className="space-y-6">
       <div className="rounded-[28px] border border-white/50 bg-[rgba(255,252,247,0.88)] p-6 shadow-soft backdrop-blur">
@@ -136,6 +150,29 @@ export function SettingsPanel({ modelConfig, onUpdateModelConfig }: SettingsPane
               </button>
               <div className="text-[11px] text-stone-400 leading-relaxed italic">
                 * 修改后需要重启应用。程序会尝试将现有数据移动到新位置。
+              </div>
+            </div>
+          </div>
+
+          {/* 数据导入设置 */}
+          <div className="rounded-[24px] bg-white/85 p-5 border-2 border-red-100">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-red-500"><AlertTriangle size={16} /> 数据导入</div>
+            <div className="space-y-3">
+              <div className="text-xs text-red-400 mb-1 font-bold">从本地目录导入并覆盖数据</div>
+              <input 
+                value={importPath} 
+                onChange={(e) => setImportPath(e.target.value)} 
+                className="w-full rounded-2xl border border-stone-200 px-3 py-2 text-sm focus:border-red-300" 
+                placeholder="数据备份所在的绝对路径" 
+              />
+              <button 
+                onClick={handleImportData} 
+                className="w-full rounded-2xl bg-red-500 px-4 py-3 text-sm font-medium text-white hover:bg-red-600 transition-colors shadow-sm"
+              >
+                导入并完全覆盖当前数据
+              </button>
+              <div className="text-[11px] text-red-400 leading-relaxed italic font-medium">
+                * 警告：此操作不可逆！导入前将自动断开当前数据库。完成后请手动重启软件。
               </div>
             </div>
           </div>
