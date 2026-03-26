@@ -237,6 +237,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, appStatus: 'LOADING_BACKEND' });
     try {
       // 1. 检查后端版本（作为可用性检查）
+      // 这里的 API 现在已被后端豁免认证，应该始终能通
       const versionData = await api.getSystemVersion();
       set({ appStatus: 'LOADING_FRONTEND' });
 
@@ -275,10 +276,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         appStatus: 'READY'
       });
     } catch (error) {
-      console.warn('Network request failed, using cached data:', error);
-      set({ appStatus: 'ERROR' });
-      if (!get().notes.length) {
-        set({ toast: { id: Date.now(), tone: 'error', text: `初始化失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
+      console.warn('Network request failed during initialization:', error);
+      
+      // 如果是 401 错误，或者是由于没有配置 Token 导致的失败
+      const isAuthError = error instanceof Error && (error.message.includes('Unauthorized') || error.message.includes('401'));
+      
+      if (isAuthError) {
+        set({ appStatus: 'ERROR' });
+        set({ toast: { id: Date.now(), tone: 'error', text: '鉴权失败：请在“设置 -> 模型设置”中配置访问令牌' } });
+      } else {
+        // 其他网络错误，如果本地有缓存则仍然允许进入 READY
+        if (get().notes.length > 0) {
+          set({ appStatus: 'READY' });
+          set({ toast: { id: Date.now(), tone: 'info', text: '后端连接失败，当前正处于离线/缓存模式。' } });
+        } else {
+          set({ appStatus: 'ERROR' });
+          set({ toast: { id: Date.now(), tone: 'error', text: `初始化失败：${error instanceof Error ? error.message : '网络请求失败'}` } });
+        }
       }
     } finally {
       set({ loading: false });

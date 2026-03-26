@@ -48,13 +48,21 @@ app.add_middleware(
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     # 豁免路径：健康检查、静态文件、以及认证配置本身不开启时
-    if (
+    # 基础初始化 API 也不强制鉴权，避免桌面端启动卡死
+    is_exempt = (
         not settings.access_token
         or request.url.path == "/health"
         or not request.url.path.startswith(settings.api_prefix)
-        # 允许某些不需要认证的路径，比如媒体文件，如果需要也可以加上
         or request.url.path.startswith(f"{settings.api_prefix}/media/files")
-    ):
+        or request.url.path == f"{settings.api_prefix}/system/version"
+        or request.url.path == f"{settings.api_prefix}/model-config"
+    )
+
+    # 如果是本地桌面端发起的请求 (127.0.0.1)，且没有设置环境变量强制开启鉴权，则自动豁免
+    # 这确保了打包版在没有配置 token 时也能正常初始化
+    is_local = request.client and request.client.host == "127.0.0.1"
+    
+    if is_exempt or is_local:
         return await call_next(request)
 
     # 从 Header 或 Cookie 中获取 Token
