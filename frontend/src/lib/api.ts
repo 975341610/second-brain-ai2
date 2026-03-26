@@ -205,4 +205,6 @@ export const api = {
   getUserStats: () => request<UserStats>('/user/stats'),
   listUserAchievements: () => request<UserAchievement[]>('/user/achievements'),
   updateUserTheme: (theme: string) => request<UserStats>('/user/theme', { method: 'PATCH', body: JSON.stringify({ theme }) }),
+  listBgm: () => request<string[]>('/bgm/list'),
+  getBgmStreamUrl: (filename: string) => `${API_BASE}/bgm/stream/${encodeURIComponent(filename)}`,
 };

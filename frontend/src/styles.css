@@ -32,6 +32,16 @@
   --reflect-muted: #999999;
 }
 
+[data-theme="zelda"] {
+  color-scheme: dark;
+  --reflect-bg: #0a0f12;
+  --reflect-sidebar: #111b1d;
+  --reflect-accent: #00eeff;
+  --reflect-border: rgba(0, 238, 255, 0.15);
+  --reflect-text: #e0faff;
+  --reflect-muted: #55777a;
+}
+
 body {
   margin: 0;
   font-family: 'Inter', sans-serif;

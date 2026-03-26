@@ -13,6 +13,7 @@ export function AchievementWall({ achievements }: AchievementWallProps) {
     { id: 'default', name: '默认白', color: 'bg-[#fcfbf9]' },
     { id: 'cyber', name: '赛博黑', color: 'bg-[#050505]' },
     { id: 'p5', name: '女神红', color: 'bg-[#d32f2f]' },
+    { id: 'zelda', name: '海拉鲁', color: 'bg-[#00eeff]' },
   ];
 
   return (

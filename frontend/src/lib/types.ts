@@ -119,3 +119,12 @@ export type UserAchievement = {
   unlocked_at: string;
   achievement: Achievement;
 };
+
+export type AppStatus = 'INIT' | 'LOADING_BACKEND' | 'LOADING_FRONTEND' | 'READY' | 'ERROR';
+
+export type BGMState = {
+  isPlaying: boolean;
+  volume: number;
+  tracks: string[];
+  currentTrack: string | null;
+};

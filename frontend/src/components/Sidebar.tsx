@@ -2,6 +2,7 @@ import { BookCopy, ChevronDown, ChevronRight, FolderPlus, Home, Layout, MoreHori
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { defaultIconFor, isDataIcon, validateExistingDataIcon, validateIconFile } from '../lib/iconUtils';
 import type { Note, Notebook, Task, TrashState } from '../lib/types';
+import { BGMPlayer } from './BGMPlayer';
 
 type SidebarProps = {
   activePage: 'home' | 'notes' | 'settings' | 'database';
@@ -494,7 +495,8 @@ export function Sidebar({
       )}
 
       {/* Footer Actions */}
-      <div className="mt-auto pt-2 space-y-0.5">
+      <div className="mt-auto pt-2 space-y-2">
+        <BGMPlayer />
         <div className="h-px bg-reflect-border/30 mx-2 mb-2" />
         
         <button 

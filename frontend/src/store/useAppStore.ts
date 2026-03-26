@@ -14,6 +14,8 @@ import type {
   Citation, 
   UserStats,
   UserAchievement,
+  AppStatus,
+  BGMState,
 } from '../lib/types';
 
 
@@ -134,7 +136,14 @@ type AppState = {
   exePath: string;
   userStats: UserStats | null;
   userAchievements: UserAchievement[];
+  appStatus: AppStatus;
+  bgm: BGMState;
+  setAppStatus: (status: AppStatus) => void;
   loadInitialData: () => Promise<void>;
+  loadBgmTracks: () => Promise<void>;
+  toggleBgm: () => void;
+  setBgmVolume: (volume: number) => void;
+  nextTrack: () => void;
   updateUserTheme: (theme: string) => Promise<void>;
     selectNote: (noteId: number) => void;
     createDraftNote: (notebookId?: number | null, parentId?: number | null) => void;
@@ -200,6 +209,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   exePath: 'unknown',
   userStats: null,
   userAchievements: [],
+  appStatus: 'INIT',
+  bgm: {
+    isPlaying: false,
+    volume: 0.5,
+    tracks: [],
+    currentTrack: null,
+  },
+  setAppStatus: (status) => set({ appStatus: status }),
   loadInitialData: async () => {
     // 优先从缓存加载，实现离线瞬间看到内容
     const [cachedNotes, cachedNotebooks, cachedTasks] = await Promise.all([
@@ -217,17 +234,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     }
 
-    set({ loading: true });
+    set({ loading: true, appStatus: 'LOADING_BACKEND' });
     try {
-      const [notes, notebooks, tasks, modelConfig, trash, versionData, userStats, userAchievements] = await Promise.all([
+      // 1. 检查后端版本（作为可用性检查）
+      const versionData = await api.getSystemVersion();
+      set({ appStatus: 'LOADING_FRONTEND' });
+
+      // 2. 并行加载所有数据
+      const [notes, notebooks, tasks, modelConfig, trash, userStats, userAchievements, bgmTracks] = await Promise.all([
         api.listNotes(),
         api.listNotebooks(),
         api.listTasks(),
         api.getModelConfig(),
         api.getTrash(),
-        api.getSystemVersion(),
         api.getUserStats(),
-        api.listUserAchievements()
+        api.listUserAchievements(),
+        api.listBgm(),
       ]);
 
       // 异步更新缓存
@@ -249,9 +271,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         exePath: versionData?.executable || 'unknown',
         selectedNoteId: get().selectedNoteId || notes[0]?.id || null,
         assistant: latestAssistantFromSession(get().chatSessions.find((session) => session.id === get().activeChatSessionId)),
+        bgm: { ...get().bgm, tracks: bgmTracks },
+        appStatus: 'READY'
       });
     } catch (error) {
       console.warn('Network request failed, using cached data:', error);
+      set({ appStatus: 'ERROR' });
       if (!get().notes.length) {
         set({ toast: { id: Date.now(), tone: 'error', text: `初始化失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
       }
@@ -259,6 +284,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ loading: false });
     }
   },
+  loadBgmTracks: async () => {
+    try {
+      const tracks = await api.listBgm();
+      set((state) => ({ bgm: { ...state.bgm, tracks } }));
+    } catch (error) {
+      console.error('Failed to load BGM tracks:', error);
+    }
+  },
+  toggleBgm: () => set((state) => {
+    const nextIsPlaying = !state.bgm.isPlaying;
+    let nextTrack = state.bgm.currentTrack;
+    if (nextIsPlaying && !nextTrack && state.bgm.tracks.length > 0) {
+      nextTrack = state.bgm.tracks[0];
+    }
+    return { bgm: { ...state.bgm, isPlaying: nextIsPlaying, currentTrack: nextTrack } };
+  }),
+  setBgmVolume: (volume) => set((state) => ({ bgm: { ...state.bgm, volume } })),
+  nextTrack: () => set((state) => {
+    if (state.bgm.tracks.length === 0) return state;
+    const currentIndex = state.bgm.currentTrack ? state.bgm.tracks.indexOf(state.bgm.currentTrack) : -1;
+    const nextIndex = (currentIndex + 1) % state.bgm.tracks.length;
+    return { bgm: { ...state.bgm, currentTrack: state.bgm.tracks[nextIndex], isPlaying: true } };
+  }),
   updateUserTheme: async (theme) => {
     try {
       const userStats = await api.updateUserTheme(theme);

@@ -7,7 +7,10 @@ import { HomeDashboard } from '../components/HomeDashboard';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { Sidebar } from '../components/Sidebar';
 import { LoginPage } from '../components/LoginPage';
+import { SplashScreen } from '../components/SplashScreen';
+import { Mascot } from '../components/Mascot';
 import { useAppStore } from '../store/useAppStore';
+import hyruleSunset from '../assets/ui/hyrule_sunset.webp';
 import { api } from '../lib/api';
 import type { OutlineItem } from '../lib/types';
 
@@ -127,10 +130,19 @@ export default function App() {
 
   return (
     <>
+    <SplashScreen />
     {!isAuthenticated ? (
       <LoginPage onLogin={handleLogin} />
     ) : (
-      <main className="min-h-screen bg-reflect-bg text-reflect-text font-sans antialiased lg:flex lg:gap-0">
+      <main className="min-h-screen bg-reflect-bg text-reflect-text font-sans antialiased lg:flex lg:gap-0 relative">
+      {/* Theme Background Layer */}
+      {userStats?.current_theme === 'zelda' && (
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          <img src={hyruleSunset} alt="Hyrule Background" className="w-full h-full object-cover opacity-10 scale-105 fixed" />
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-reflect-bg/80 to-reflect-bg" />
+        </div>
+      )}
+      
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 rounded-xl border px-6 py-4 text-sm shadow-soft-lg animate-in fade-in slide-in-from-bottom-4 duration-300 ${toastClasses}`}>
@@ -282,6 +294,7 @@ export default function App() {
               <AssistantPanel assistant={assistant} modelConfig={modelConfig} loading={loading} onAsk={askStreamingAssistant} sessions={chatSessions} activeSessionId={activeChatSessionId} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} onUpdateModelConfig={async () => {}} />
             </div>
           )}
+          <Mascot />
         </>
       )}
     </main>

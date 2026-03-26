@@ -42,7 +42,7 @@ from backend.models.schemas import (
     UserAchievementResponse,
     ThemeUpdatePayload,
 )
-from backend.database import get_db, SessionLocal
+from backend.database import get_db, SessionLocal, engine
 from backend.utils import log_buffer
 import subprocess
 import json
@@ -616,6 +616,35 @@ def purge_trash_api(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=500, detail="Failed to purge trash")
     return {"status": "ok"}
 
+# ============================================================
+# 🎵 BGM 播放器接口
+# ============================================================
+
+@router.get("/bgm/list", response_model=list[str])
+def list_bgm():
+    """获取 BGM 文件列表"""
+    bgm_path = Path(settings.data_root) / "bgm"
+    if not bgm_path.exists():
+        bgm_path.mkdir(parents=True, exist_ok=True)
+    
+    files = []
+    for ext in ["*.mp3", "*.wav", "*.ogg"]:
+        files.extend([f.name for f in bgm_path.glob(ext)])
+    return sorted(files)
+
+@router.get("/bgm/stream/{filename}")
+def stream_bgm(filename: str):
+    """流式返回 BGM 文件"""
+    bgm_path = Path(settings.data_root) / "bgm" / filename
+    if not bgm_path.exists():
+        raise HTTPException(status_code=404, detail="BGM file not found")
+    
+    def iterfile():
+        with open(bgm_path, mode="rb") as f:
+            yield from f
+            
+    return StreamingResponse(iterfile(), media_type="audio/mpeg")
+
 @router.get("/tasks", response_model=list[TaskResponse])
 def get_tasks(db: Session = Depends(get_db)) -> list[TaskResponse]:
     return [TaskResponse.model_validate(task) for task in list_tasks(db)]
@@ -864,3 +893,55 @@ async def system_restart():
         return {"status": "ok", "message": "Restarting..."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/system/import-data")
+async def import_data(payload: dict):
+    """从源目录导入数据并覆盖当前数据。"""
+    source_path_str = payload.get("source_path")
+    if not source_path_str:
+        raise HTTPException(status_code=400, detail="Missing source_path")
+    
+    source_path = Path(source_path_str).resolve()
+    data_root = settings.data_root.resolve()
+    
+    # 1. 验证路径
+    if not source_path.exists() or not source_path.is_dir():
+        raise HTTPException(status_code=400, detail="Invalid source path")
+    
+    # 2. 检查源目录是否包含数据库文件
+    if not (source_path / "second_brain.db").exists():
+        raise HTTPException(status_code=400, detail="second_brain.db not found in source path")
+    
+    # 3. 检查源目录是否等于目标目录
+    if source_path == data_root:
+        raise HTTPException(status_code=400, detail="选择的导入目录与当前数据目录相同，无需导入")
+
+    try:
+        # 4. 关闭所有数据库连接以便文件操作
+        engine.dispose()
+        
+        # 5. 复制数据
+        print(f"[*] Importing data from {source_path} to {data_root}...")
+        
+        # 定义要复制的文件和目录
+        items_to_copy = ["second_brain.db", "chroma_store", "uploads"]
+        
+        for item_name in items_to_copy:
+            src_item = source_path / item_name
+            dest_item = data_root / item_name
+            
+            if src_item.exists():
+                if src_item.is_dir():
+                    # 如果目标存在，先删除
+                    if dest_item.exists():
+                        shutil.rmtree(dest_item)
+                    shutil.copytree(src_item, dest_item)
+                else:
+                    # 如果目标是文件且存在，直接复制会覆盖
+                    shutil.copy2(src_item, dest_item)
+                    
+        return {"status": "ok", "message": "数据导入成功，请重启软件以加载新数据"}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to import data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to import data: {str(e)}")
