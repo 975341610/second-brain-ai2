@@ -10,3 +10,6 @@ pypdf==5.3.0
 pywebview==5.1
 keyboard==0.13.5
 plyer==2.1.0
+rembg==2.0.60
+onnxruntime==1.20.1
+Pillow==11.1.0

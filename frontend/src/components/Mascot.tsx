@@ -5,6 +5,9 @@ import zeldaSprite from '../assets/sprites/zelda.webp';
 import revaliSprite from '../assets/sprites/revali.webp';
 import urbosaSprite from '../assets/sprites/urbosa.webp';
 import sidonSprite from '../assets/sprites/sidon.webp';
+import tifaSprite from '../assets/sprites/tifa.webp';
+import aerithSprite from '../assets/sprites/aerith.webp';
+import yuffieSprite from '../assets/sprites/yuffie.webp';
 
 const sprites = [
   { name: 'Link', src: linkSprite },
@@ -12,6 +15,9 @@ const sprites = [
   { name: 'Revali', src: revaliSprite },
   { name: 'Urbosa', src: urbosaSprite },
   { name: 'Sidon', src: sidonSprite },
+  { name: 'Tifa', src: tifaSprite },
+  { name: 'Aerith', src: aerithSprite },
+  { name: 'Yuffie', src: yuffieSprite },
 ];
 
 export const Mascot: React.FC = () => {

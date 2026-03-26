@@ -45,6 +45,7 @@ hiddenimports = collect_submodules("chromadb") + [
     "pydantic",
     "pydantic_settings",
     "webview",
+    "keyboard",
 ]
 
 a = Analysis(
