@@ -194,3 +194,19 @@ async def spa(full_path: str):
     
     # 4. Fallback if no frontend is built
     return JSONResponse({"status": "backend-only"}, status_code=200)
+
+
+if __name__ == '__main__':
+    import uvicorn
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--host", type=str, default="127.0.0.1")
+    args = parser.parse_args()
+    
+    # 获取环境变量（由 Electron 传入的覆盖优先）
+    port = int(os.environ.get("PORT", args.port))
+    host = os.environ.get("HOST", args.host)
+    
+    print(f"[*] Starting backend server on {host}:{port}")
+    uvicorn.run(app, host=host, port=port)

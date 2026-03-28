@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron';
+import log from 'electron-log';
+import { app, BrowserWindow, Tray, Menu, ipcMain, dialog, nativeImage } from 'electron';
 import path from 'path';
 import { autoUpdater } from 'electron-updater';
 import { SidecarManager } from './sidecar';
@@ -8,6 +9,14 @@ let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const isDev = !app.isPackaged;
+
+process.on('uncaughtException', (error) => {
+  log.error('Uncaught Exception:', error);
+});
+process.on('unhandledRejection', (reason) => {
+  log.error('Unhandled Rejection:', reason);
+});
+
 
 // 确保 backend 路径计算准确
 const getBackendPath = () => {
@@ -91,7 +100,16 @@ function createTray() {
   const iconPath = isDev 
     ? path.join(app.getAppPath(), 'resources/icon.png')
     : path.join(__dirname, '../../resources/icon.png');
-  tray = new Tray(iconPath);
+  
+  // Check if icon exists, else use empty image to prevent crash
+  const fs = require('fs');
+  const trayIcon = fs.existsSync(iconPath) ? iconPath : nativeImage.createEmpty();
+  try {
+    tray = new Tray(trayIcon);
+  } catch (e) {
+    log.error('Failed to create tray:', e);
+    return;
+  }
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示主界面', click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show() } },
     { type: 'separator' },
@@ -138,7 +156,7 @@ function createWindow() {
     frame: false,
     show: false, // 初始不显示，等待 ready-to-show
     transparent: true,
-    icon: iconPath,
+    icon: require('fs').existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
