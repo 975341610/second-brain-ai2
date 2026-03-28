@@ -28,12 +28,12 @@
   "build": {
     "appId": "com.secondbrain.ai",
     "productName": "Second Brain AI",
+    "publish": null,
     "directories": {
       "output": "dist"
     },
     "win": {
-      "target": ["nsis", "zip"],
-      "icon": "build/icon.ico"
+      "target": ["nsis", "zip"]
     },
     "nsis": {
       "oneClick": false,
