@@ -25,27 +25,27 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false; // 询问用户后再下载
 
   autoUpdater.on('checking-for-update', () => {
-    mainWindow?.webContents.send('update-message', 'Checking for update...');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-message', 'Checking for update...');
   });
 
   autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('update-available', info);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-available', info);
   });
 
   autoUpdater.on('update-not-available', () => {
-    mainWindow?.webContents.send('update-message', 'Update not available.');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-message', 'Update not available.');
   });
 
   autoUpdater.on('error', (err) => {
-    mainWindow?.webContents.send('update-error', err.message);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-error', err.message);
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
-    mainWindow?.webContents.send('update-download-progress', progressObj);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-download-progress', progressObj);
   });
 
   autoUpdater.on('update-downloaded', () => {
-    mainWindow?.webContents.send('update-downloaded');
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-downloaded');
   });
 
   ipcMain.handle('check-for-update', () => autoUpdater.checkForUpdatesAndNotify());
@@ -80,11 +80,11 @@ function setupAutoUpdater() {
 }
 
 function handleIPC() {
-  ipcMain.on('window-minimize', () => mainWindow?.minimize());
-  ipcMain.on('window-maximize', () => mainWindow?.maximize());
-  ipcMain.on('window-unmaximize', () => mainWindow?.unmaximize());
-  ipcMain.on('window-close', () => mainWindow?.hide());
-  ipcMain.handle('window-is-maximized', () => mainWindow ? mainWindow.isMaximized() : false);
+  ipcMain.on('window-minimize', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize() });
+  ipcMain.on('window-maximize', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.maximize() });
+  ipcMain.on('window-unmaximize', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.unmaximize() });
+  ipcMain.on('window-close', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide() });
+  ipcMain.handle('window-is-maximized', () => { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow.isMaximized() : false });
 }
 
 function createTray() {
@@ -93,7 +93,7 @@ function createTray() {
     : path.join(__dirname, '../../resources/icon.png');
   tray = new Tray(iconPath);
   const contextMenu = Menu.buildFromTemplate([
-    { label: '显示主界面', click: () => mainWindow?.show() },
+    { label: '显示主界面', click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show() } },
     { type: 'separator' },
     { label: '退出', click: () => {
         sidecar.stop().then(() => app.quit());
@@ -122,6 +122,9 @@ function createSplashWindow() {
   } else {
     splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
   }
+  splashWindow.on('closed', () => {
+    splashWindow = null;
+  });
 }
 
 function createWindow() {
@@ -150,11 +153,11 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
-    if (splashWindow) {
+    if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.close();
       splashWindow = null;
     }
-    mainWindow?.show();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
   });
 
   mainWindow.on('closed', () => {
