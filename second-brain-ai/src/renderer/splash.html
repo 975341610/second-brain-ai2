@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Second Brain AI Loading...</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: white;
+    }
+
+    .video-background {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      opacity: 0.6;
+    }
+
+    .container {
+      text-align: center;
+      z-index: 1;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .logo {
+      font-size: 3rem;
+      font-weight: bold;
+      letter-spacing: 4px;
+      margin-bottom: 20px;
+      background: linear-gradient(45deg, #00f2fe 0%, #4facfe 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+    }
+
+    .loader {
+      width: 200px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 0 auto;
+    }
+
+    .loader-bar {
+      width: 0%;
+      height: 100%;
+      background: #4facfe;
+      box-shadow: 0 0 10px #4facfe;
+      animation: progress 3s ease-in-out infinite;
+    }
+
+    @keyframes progress {
+      0% { width: 0%; transform: translateX(-100%); }
+      50% { width: 100%; transform: translateX(0); }
+      100% { width: 0%; transform: translateX(100%); }
+    }
+
+    .status-text {
+      margin-top: 20px;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 300;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+  <!-- 背景视频，使用已有的 cyberpunk.mp4 -->
+  <video class="video-background" autoplay muted loop playsinline>
+    <source src="backgrounds/cyberpunk.mp4" type="video/mp4">
+  </video>
+
+  <div class="container">
+    <div class="logo">Second Brain AI</div>
+    <div class="loader">
+      <div class="loader-bar"></div>
+    </div>
+    <div class="status-text" id="status">Initializing Core Systems...</div>
+  </div>
+
+  <script>
+    const statusText = document.getElementById('status');
+    const statuses = [
+      'Booting AI Engine...',
+      'Connecting to Neural Database...',
+      'Syncing Knowledge Graphs...',
+      'Optimizing Memory Nodes...',
+      'Readying User Interface...'
+    ];
+    let i = 0;
+    setInterval(() => {
+      statusText.innerText = statuses[i % statuses.length];
+      i++;
+    }, 1500);
+  </script>
+</body>
+</html>
