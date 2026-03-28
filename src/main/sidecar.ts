@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import treeKill from 'tree-kill';
 import path from 'path';
+import log from 'electron-log';
 
 export class SidecarManager {
   private process: ChildProcess | null = null;
@@ -10,6 +11,10 @@ export class SidecarManager {
   constructor(backendPath: string, isDev: boolean) {
     this.backendPath = backendPath;
     this.isDev = isDev;
+    
+    // 配置 electron-log
+    log.transports.file.level = 'info';
+    log.info('SidecarManager initialized with backendPath:', backendPath, 'isDev:', isDev);
   }
 
   async start(): Promise<void> {
@@ -27,9 +32,12 @@ export class SidecarManager {
       args = [];
     }
 
+    log.info(`Starting sidecar process: ${command} ${args.join(' ')}`);
+    log.info(`Sidecar working directory: ${this.backendPath}`);
+
     this.process = spawn(command, args, {
       cwd: this.backendPath,
-      stdio: 'inherit',
+      stdio: 'pipe', // 修改为 pipe 以便捕获输出
       shell: true,
       detached: true,
       env: {
@@ -39,12 +47,39 @@ export class SidecarManager {
       }
     });
 
+    if (this.process.stdout) {
+      this.process.stdout.on('data', (data) => {
+        const output = data.toString().trim();
+        if (output) {
+          log.info(`[Backend STDOUT] ${output}`);
+        }
+      });
+    }
+
+    if (this.process.stderr) {
+      this.process.stderr.on('data', (data) => {
+        const output = data.toString().trim();
+        if (output) {
+          log.error(`[Backend STDERR] ${output}`);
+        }
+      });
+    }
+
     return new Promise((resolve, reject) => {
       this.process?.on('spawn', () => {
+        log.info('Backend process spawned successfully');
         // 等待后端启动就绪 (简单轮询健康检查)
         this.waitForBackendReady().then(resolve).catch(reject);
       });
-      this.process?.on('error', (err) => reject(err));
+
+      this.process?.on('error', (err) => {
+        log.error('Backend process failed to start:', err);
+        reject(err);
+      });
+
+      this.process?.on('exit', (code, signal) => {
+        log.warn(`Backend process exited with code ${code} and signal ${signal}`);
+      });
     });
   }
 
