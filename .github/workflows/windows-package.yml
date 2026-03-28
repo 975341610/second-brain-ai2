@@ -46,6 +46,8 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         shell: powershell
+        env:
+          CI: false
         run: npm run build
 
       - name: Install backend build dependencies
