@@ -35,12 +35,15 @@ jobs:
         env:
           CI: false
         run: |
+          if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
           yarn install
           yarn build
         working-directory: ./frontend
           
       - name: Install Dependencies
-        run: yarn install
+        run: |
+          if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
+          yarn install
       - name: Build Windows App
         env:
           CI: false

@@ -40,6 +40,7 @@ jobs:
         working-directory: frontend
         shell: powershell
         run: |
+          if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
           yarn install
 
       - name: Build frontend
