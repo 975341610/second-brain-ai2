@@ -14,14 +14,7 @@ export default defineConfig({
     plugins: [react()],
     resolve: {
       alias: {
-        '@': resolve('frontend/src')
-      }
-    },
-    build: {
-      rollupOptions: {
-        input: {
-          index: resolve(__dirname, 'frontend/index.html')
-        }
+        '@': resolve(__dirname, 'frontend/src')
       }
     }
   }

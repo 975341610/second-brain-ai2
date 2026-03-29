@@ -140,6 +140,12 @@ function createSplashWindow() {
   } else {
     splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
   }
+
+  // Add error logging
+  splashWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    log.error(`Splash window failed to load: ${errorCode} - ${errorDescription} at ${validatedURL}`);
+  });
+
   splashWindow.on('closed', () => {
     splashWindow = null;
   });
@@ -162,6 +168,25 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true
     }
+  });
+
+  // Add error logging
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    log.error(`Main window failed to load: ${errorCode} - ${errorDescription} at ${validatedURL}`);
+    if (isDev) {
+      log.info('ELECTRON_RENDERER_URL:', process.env['ELECTRON_RENDERER_URL']);
+    }
+  });
+  mainWindow.webContents.on('crashed', (event, killed) => {
+    log.error(`Main window crashed: killed=${killed}`);
+  });
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    log.error(`Main window render process gone: ${details.reason} (${details.exitCode})`);
+  });
+
+  // Add console message logging
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    log.info(`Renderer Console: [${level}] ${message} (${sourceId}:${line})`);
   });
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
