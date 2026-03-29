@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@tiptap/extension-blockquote": "^3.21.0",
     "@tiptap/extension-bubble-menu": "^3.20.4",
     "@tiptap/extension-code-block-lowlight": "^3.20.4",
     "@tiptap/extension-drag-handle": "^3.20.4",
