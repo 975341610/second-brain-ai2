@@ -40,7 +40,10 @@ jobs:
         env:
           CI: false
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run build:win
+        run: |
+          npm run build:electron
+          npm run copy:frontend
+          npm run build:builder
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
