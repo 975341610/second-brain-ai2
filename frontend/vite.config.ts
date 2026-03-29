@@ -11,7 +11,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
-  base: "./",
+  base: process.env.NODE_ENV === 'development' ? '/' : './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,

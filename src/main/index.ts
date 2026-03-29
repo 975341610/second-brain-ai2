@@ -137,8 +137,6 @@ function createSplashWindow() {
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     splashWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/splash.html`);
-  } else if (isDev) {
-    splashWindow.loadURL('http://localhost:5173/splash.html');
   } else {
     splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
   }
@@ -167,9 +165,7 @@ function createWindow() {
   });
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/index.html`);
-  } else if (isDev) {
-    mainWindow.loadURL('http://localhost:5173/index.html');
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
