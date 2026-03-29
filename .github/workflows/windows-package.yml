@@ -40,18 +40,14 @@ jobs:
         working-directory: frontend
         shell: powershell
         run: |
-          if (Test-Path package-lock.json) {
-            npm ci
-          } else {
-            npm install
-          }
+          yarn install
 
       - name: Build frontend
         working-directory: frontend
         shell: powershell
         env:
           CI: false
-        run: npm run build
+        run: yarn build
 
       - name: Install backend build dependencies
         shell: powershell
