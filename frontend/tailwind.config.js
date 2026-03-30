@@ -1,6 +1,14 @@
 /** @type {import('tailwindcss').Config} */
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: [
+    resolve(__dirname, 'index.html'),
+    resolve(__dirname, 'src/**/*.{ts,tsx}'),
+  ],
   theme: {
     extend: {
       fontFamily: {
@@ -16,7 +24,7 @@ export default {
           border: 'var(--reflect-border)',
           text: 'var(--reflect-text)',
           muted: 'var(--reflect-muted)',
-        }
+        },
       },
       boxShadow: {
         soft: '0 2px 10px rgba(0, 0, 0, 0.05)',
