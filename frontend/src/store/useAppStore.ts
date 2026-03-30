@@ -384,10 +384,16 @@ export const useAppStore = create<AppState>((set, get) => ({
           });
       const currentNotes = get().notes;
       const withoutOriginal = typeof id === 'number' ? currentNotes.filter((item) => item.id !== id) : currentNotes;
-      const hasTarget = withoutOriginal.some((item) => item.id === note.id);
+      
+      // 更新所有子笔记的 parent_id，如果它们的父笔记刚从草稿转正
+      const updatedNotesWithParentUpdate = isDraft && typeof id === 'number'
+        ? withoutOriginal.map(n => n.parent_id === id ? { ...n, parent_id: note.id } : n)
+        : withoutOriginal;
+
+      const hasTarget = updatedNotesWithParentUpdate.some((item) => item.id === note.id);
       const notes = hasTarget
-        ? withoutOriginal.map((item) => (item.id === note.id ? note : item))
-        : [note, ...withoutOriginal];
+        ? updatedNotesWithParentUpdate.map((item) => (item.id === note.id ? note : item))
+        : [note, ...updatedNotesWithParentUpdate];
 
       // 只有在非静默保存（通常是手动点击保存或明确创建笔记）时，才可能更新 selectedNoteId
       // 如果是自动保存 (silent: true)，绝对不触碰当前选中的 ID，防止页面跳变
@@ -502,18 +508,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     const noteIds = get().selectedNoteIds;
     if (noteIds.length === 0) return;
     try {
-      await api.bulkDeleteNotes({ note_ids: noteIds });
+      const realNoteIds = noteIds.filter(id => id > 0);
+      const draftNoteIds = noteIds.filter(id => id < 0);
+      
+      if (realNoteIds.length > 0) {
+        await api.bulkDeleteNotes({ note_ids: realNoteIds });
+      }
+      
       const [notes, trash] = await Promise.all([api.listNotes(), api.getTrash()]);
-      set({ notes, trash, selectedNoteIds: [], toast: { id: Date.now(), tone: 'success', text: '已批量移入垃圾桶。' } });
+      
+      // 对于本地草稿，由于后端返回的 notes 肯定不含它们，我们只需要确保不小心混入的草稿也被过滤掉（通常 api.listNotes() 就够了）
+      // 但为了保险，我们可以显式过滤掉 draftNoteIds
+      const finalNotes = notes.filter(n => !draftNoteIds.includes(n.id));
+      
+      set({ notes: finalNotes, trash, selectedNoteIds: [], toast: { id: Date.now(), tone: 'success', text: '已批量移入垃圾桶。' } });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `批量删除失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }
   },
   deleteNote: async (noteId) => {
     try {
-      await api.deleteNote(noteId);
+      if (noteId > 0) {
+        await api.deleteNote(noteId);
+      }
+      
       const [notes, trash] = await Promise.all([api.listNotes(), api.getTrash()]);
-      set({ notes, trash, selectedNoteId: get().selectedNoteId === noteId ? notes[0]?.id ?? null : get().selectedNoteId, toast: { id: Date.now(), tone: 'success', text: '笔记已移入垃圾桶。' } });
+      
+      // 如果是草稿，手动从 notes 列表中移除（以防 api.listNotes 还没更新或者网络延迟）
+      const finalNotes = noteId < 0 ? notes.filter(n => n.id !== noteId) : notes;
+      
+      set({ 
+        notes: finalNotes, 
+        trash, 
+        selectedNoteId: get().selectedNoteId === noteId ? finalNotes[0]?.id ?? null : get().selectedNoteId, 
+        toast: { id: Date.now(), tone: 'success', text: noteId < 0 ? '草稿已移除。' : '笔记已移入垃圾桶。' } 
+      });
     } catch (error) {
       set({ toast: { id: Date.now(), tone: 'error', text: `删除笔记失败：${error instanceof Error ? error.message : '请稍后重试'}` } });
     }

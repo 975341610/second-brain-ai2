@@ -185,8 +185,21 @@ def soft_delete_note(db: Session, note_id: int) -> Note | None:
     note = db.get(Note, note_id)
     if not note:
         return None
-    note.deleted_at = datetime.utcnow()
+    
+    now = datetime.utcnow()
+    
+    # 递归软删除所有子笔记
+    def recursive_soft_delete(parent_id: int):
+        children = list(db.scalars(select(Note).where(Note.parent_id == parent_id, Note.deleted_at.is_(None))))
+        for child in children:
+            child.deleted_at = now
+            db.add(child)
+            recursive_soft_delete(child.id)
+            
+    note.deleted_at = now
     db.add(note)
+    recursive_soft_delete(note_id)
+    
     db.commit()
     db.refresh(note)
     return note
