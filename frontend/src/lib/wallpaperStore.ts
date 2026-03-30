@@ -55,7 +55,7 @@ export const wallpaperStore = {
     return db.getAll(STORE_NAME);
   },
 
-  async resolveIdbUrl(url: string): Promise<string | null> {
+  async resolveIdbUrl(url: string): Promise<{ url: string; type: string } | string | null> {
     if (!url.startsWith('idb://')) return url;
     const id = url.replace('idb://', '');
     const entry = await this.getWallpaper(id);
@@ -65,6 +65,9 @@ export const wallpaperStore = {
       ? new Blob([entry.data], { type: entry.type }) 
       : entry.data;
       
-    return URL.createObjectURL(blob);
+    return {
+      url: URL.createObjectURL(blob),
+      type: entry.type
+    };
   }
 };

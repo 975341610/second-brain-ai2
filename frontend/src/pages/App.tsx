@@ -35,6 +35,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<'home' | 'notes' | 'settings' | 'database'>('home');
   const [showAssistantCard, setShowAssistantCard] = useState(false);
   const [wallpaperUrl, setWallpaperUrl] = useState<string | null>(null);
+  const [wallpaperType, setWallpaperType] = useState<string | null>(null);
   const {
     notes,
     notebooks,
@@ -122,13 +123,21 @@ export default function App() {
     const loadWallpaper = async () => {
       if (userStats?.wallpaper_url) {
         if (userStats.wallpaper_url.startsWith('idb://')) {
-          const url = await wallpaperStore.resolveIdbUrl(userStats.wallpaper_url);
-          setWallpaperUrl(url);
+          const result = await wallpaperStore.resolveIdbUrl(userStats.wallpaper_url);
+          if (result && typeof result === 'object') {
+            setWallpaperUrl(result.url);
+            setWallpaperType(result.type);
+          } else {
+            setWallpaperUrl(result as string);
+            setWallpaperType(null);
+          }
         } else {
           setWallpaperUrl(userStats.wallpaper_url);
+          setWallpaperType(null);
         }
       } else {
         setWallpaperUrl(null);
+        setWallpaperType(null);
       }
     };
     void loadWallpaper();
@@ -156,7 +165,7 @@ export default function App() {
       {/* Theme Background Layer */}
       {wallpaperUrl && (
         <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
-          {wallpaperUrl.includes('video') || wallpaperUrl.endsWith('.mp4') || wallpaperUrl.endsWith('.webm') ? (
+          {(wallpaperType?.includes('video') || wallpaperUrl.includes('video') || wallpaperUrl.endsWith('.mp4') || wallpaperUrl.endsWith('.webm')) ? (
             <video src={wallpaperUrl} autoPlay muted loop playsInline className="wallpaper-video w-full h-full object-cover" />
           ) : (
             <img src={wallpaperUrl} alt="Wallpaper" className="w-full h-full object-cover" />

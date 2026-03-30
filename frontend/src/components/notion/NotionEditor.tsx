@@ -510,7 +510,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   }, [note?.id, editor]); // ← 关键：只依赖 note.id，不依赖整个 note 对象
 
   // Auto-save logic with Debounce and Ref Lock (v0.3.41)
-  const isSavingRef = useRef(false);
+  const isSavingRef = useRef<number | null>(null);
   const onSaveRef = useRef(onSave);
   const isUnmountedRef = useRef(false);
 
@@ -534,15 +534,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       if (isUnmountedRef.current) return;
       
       // [关键修复] 严格校验当前编辑器正在编辑的笔记 ID
-      // 必须与进入 handleSave 时的 ID 强一致，且 noteRef.current 必须指向该 ID
       if (noteRef.current?.id !== targetNoteId) {
-        console.warn(`[Auto-save] Note ID mismatch. Aborting save for ${targetNoteId}`);
         return;
       }
 
-      // 防止并发保存冲突
-      if (isSavingRef.current) {
-        // 如果正在保存，1秒后再试一次。再次尝试时依然会进行 ID 校验
+      // 防止同一篇笔记的并发保存，允许不同笔记的串行处理
+      if (isSavingRef.current === targetNoteId) {
         timer = setTimeout(() => handleSave(targetNoteId), 1000);
         return;
       }
@@ -550,7 +547,6 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       const currentContent = editor.getHTML();
       const currentText = editor.getText().trim();
       
-      // 仅在有内容或标题变化时执行保存
       const lastNote = noteRef.current;
       if (!lastNote) return;
 
@@ -566,11 +562,10 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
         return;
       }
 
-      isSavingRef.current = true;
-      if (!isUnmountedRef.current) setIsSaving(true);
+      isSavingRef.current = targetNoteId;
+      if (!isUnmountedRef.current && noteRef.current?.id === targetNoteId) setIsSaving(true);
       
       try {
-        // [关键修复] 再次校验 ID，因为 getHTML 等操作可能耗时
         if (noteRef.current?.id !== targetNoteId || isUnmountedRef.current) {
           return;
         }
@@ -590,8 +585,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
       } catch (error) {
         console.error("Auto-save failed", error);
       } finally {
-        isSavingRef.current = false;
-        if (!isUnmountedRef.current) setIsSaving(false);
+        if (isSavingRef.current === targetNoteId) isSavingRef.current = null;
+        if (!isUnmountedRef.current && noteRef.current?.id === targetNoteId) setIsSaving(false);
       }
     };
 

@@ -39,8 +39,10 @@ export function SettingsPanel({ modelConfig, onUpdateModelConfig }: SettingsPane
       // 生成预览
       const previews: Record<string, string> = {};
       for (const wp of list) {
-        const url = await wallpaperStore.resolveIdbUrl(`idb://${wp.id}`);
-        if (url) previews[wp.id] = url;
+        const result = await wallpaperStore.resolveIdbUrl(`idb://${wp.id}`);
+        if (result) {
+          previews[wp.id] = typeof result === 'object' ? result.url : result;
+        }
       }
       setWallpaperPreviews(previews);
     } catch (e) {

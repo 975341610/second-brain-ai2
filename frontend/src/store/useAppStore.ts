@@ -536,7 +536,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       
       const [backendNotes, trash] = await Promise.all([api.listNotes(), api.getTrash()]);
-      const finalNotes = backendNotes.filter(n => !notesToFilter.has(n.id));
+      
+      // 修复“删除连坐”：在合并后端数据时，保留未被删除的本地草稿
+      const localDrafts = get().notes.filter(n => n.id < 0 && !notesToFilter.has(n.id));
+      const finalNotes = [...localDrafts, ...backendNotes.filter(n => !notesToFilter.has(n.id))];
       
       set({ notes: finalNotes, trash, selectedNoteIds: [], toast: { id: Date.now(), tone: 'success', text: '已批量移入垃圾桶。' } });
       setCachedData(STORE_NOTES, finalNotes);
@@ -555,9 +558,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       // 简单直观：后端返回什么，前端就显示什么。
       // 后端 repositories.py:192 已经处理了递归软删除，前端不需要重复计算子树。
       // 只有对于负数 ID（尚未持久化的草稿），后端不知道它们，需要前端手动过滤。
-      const finalNotes = noteId < 0 
-        ? backendNotes.filter(n => n.id !== noteId)
-        : backendNotes;
+      // 修复“删除连坐”：在合并后端数据时，必须保留本地现有的其他草稿（负数 ID）
+      const localDrafts = get().notes.filter(n => n.id < 0 && n.id !== noteId);
+      const finalNotes = [...localDrafts, ...backendNotes];
       
       set({ 
         notes: finalNotes, 
