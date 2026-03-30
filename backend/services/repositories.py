@@ -556,3 +556,12 @@ def add_exp(db: Session, amount: int) -> UserStats:
     db.commit()
     db.refresh(stats)
     return stats
+
+
+def update_user_wallpaper(db: Session, wallpaper_url: str) -> UserStats:
+    stats = get_or_create_user_stats(db)
+    stats.wallpaper_url = wallpaper_url
+    db.add(stats)
+    db.commit()
+    db.refresh(stats)
+    return stats

@@ -137,6 +137,8 @@ def run_migrations() -> None:
         user_stats_columns = {column["name"] for column in inspector.get_columns("user_stats")} if "user_stats" in inspector.get_table_names() else set()
         if "current_theme" not in user_stats_columns:
             connection.execute(text("ALTER TABLE user_stats ADD COLUMN current_theme VARCHAR(50) DEFAULT 'default'"))
+        if "wallpaper_url" not in user_stats_columns:
+            connection.execute(text("ALTER TABLE user_stats ADD COLUMN wallpaper_url VARCHAR(1000)"))
 
         # Achievements migration
         if "achievements" not in inspector.get_table_names():

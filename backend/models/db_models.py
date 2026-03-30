@@ -121,6 +121,7 @@ class UserStats(Base):
     level: Mapped[int] = mapped_column(Integer, default=1)
     total_captures: Mapped[int] = mapped_column(Integer, default=0)
     current_theme: Mapped[str] = mapped_column(String(50), default="default")
+    wallpaper_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

@@ -212,6 +212,7 @@ class UserStatsResponse(BaseModel):
     level: int
     total_captures: int
     current_theme: str
+    wallpaper_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -242,3 +243,6 @@ class UserAchievementResponse(BaseModel):
 
 class ThemeUpdatePayload(BaseModel):
     theme: str
+
+class UserWallpaperUpdateRequest(BaseModel):
+    wallpaper_url: Optional[str] = None

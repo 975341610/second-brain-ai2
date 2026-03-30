@@ -77,11 +77,14 @@ export function HomeDashboard({
           <Clock3 size={12} /> 最近记录
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {recentNotes.slice(0, 3).map((note) => (
+          {recentNotes.slice(0, 3).map((note, idx) => {
+            const macaronColors = ['bg-macaron-pink', 'bg-macaron-blue', 'bg-macaron-green', 'bg-macaron-yellow', 'bg-macaron-purple'];
+            const macaronBg = !hasWallpaper ? macaronColors[idx % macaronColors.length] + '/30' : '';
+            return (
             <button 
               key={note.id} 
               onClick={() => onSelectNote(note.id)} 
-              className={`group relative h-40 rounded-2xl border border-reflect-border/50 p-6 text-left transition-all hover:border-reflect-accent/30 hover:shadow-soft ${glassClasses}`}
+              className={`group relative h-40 rounded-2xl border border-reflect-border/50 p-6 text-left transition-all hover:border-reflect-accent/30 hover:shadow-soft ${glassClasses} ${macaronBg}`}
             >
               <div className="text-2xl mb-3 opacity-80 group-hover:opacity-100 transition-opacity">{note.icon || '📝'}</div>
               <div className="text-sm font-semibold text-reflect-text leading-tight mb-1">{note.title}</div>
@@ -92,7 +95,7 @@ export function HomeDashboard({
                  <Plus size={14} />
               </div>
             </button>
-          ))}
+          );})}
         </div>
       </div>
 

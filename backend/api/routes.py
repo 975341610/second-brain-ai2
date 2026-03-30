@@ -89,6 +89,7 @@ from backend.services.repositories import (
     list_user_achievements,
     check_and_unlock_achievements,
     update_user_theme,
+    update_user_wallpaper,
 )
 from backend.services.vector_store import vector_store
 

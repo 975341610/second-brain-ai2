@@ -48,16 +48,34 @@ body {
 }
 
 .glass-panel {
+  position: relative;
+  z-index: 1;
+}
+.glass-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(60px) saturate(180%);
   -webkit-backdrop-filter: blur(60px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+  border-radius: inherit;
 }
 
 .sidebar-bg-fix {
+  position: relative;
+}
+.sidebar-bg-fix::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
+  pointer-events: none;
 }
 
 .wallpaper-video {
