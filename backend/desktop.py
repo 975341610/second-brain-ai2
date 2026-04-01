@@ -23,4 +23,12 @@ def open_browser() -> None:
 
 if __name__ == "__main__":
     threading.Thread(target=open_browser, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=8765, server_header=False, headers=[("X-App-Version", APP_VERSION)])
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=8765,
+        server_header=False,
+        headers=[("X-App-Version", APP_VERSION)],
+        log_config=None,
+        access_log=False,
+    )
