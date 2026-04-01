@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
 from backend.api.routes import router
-from backend.config import get_settings, runtime_root
+from backend.config import bundle_root, get_settings, runtime_root
 from backend.database import Base, SessionLocal, engine
 from backend.sample_data import seed_database, seed_files
 from backend.version import APP_VERSION
@@ -28,7 +28,7 @@ app.add_middleware(
 
 app.include_router(router, prefix=settings.api_prefix)
 
-frontend_dist = runtime_root() / "frontend_dist"
+frontend_dist = bundle_root() / "frontend_dist"
 assets_dir = frontend_dist / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
