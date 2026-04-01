@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 import uvicorn
 
-from backend.main import app
+from backend.main import app, frontend_dist
 from backend.version import APP_VERSION
 
 
@@ -87,6 +87,9 @@ def open_browser() -> None:
 def main() -> None:
     ensure_stdio()
     append_startup_log(f"Starting Second Brain AI {APP_VERSION}")
+    append_startup_log(f"Runtime dir: {runtime_dir()}")
+    append_startup_log(f"Frontend dir: {frontend_dist if frontend_dist else 'missing'}")
+    append_startup_log(f"Frontend index exists: {bool(frontend_dist and (frontend_dist / 'index.html').exists())}")
     threading.Thread(target=open_browser, daemon=True).start()
     uvicorn.run(
         app,
