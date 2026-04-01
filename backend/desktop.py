@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 import uvicorn
 
-from backend.main import app, frontend_dist
+from backend.main import app, frontend_dist, frontend_index_html
 from backend.version import APP_VERSION
 
 
@@ -90,6 +90,7 @@ def main() -> None:
     append_startup_log(f"Runtime dir: {runtime_dir()}")
     append_startup_log(f"Frontend dir: {frontend_dist if frontend_dist else 'missing'}")
     append_startup_log(f"Frontend index exists: {bool(frontend_dist and (frontend_dist / 'index.html').exists())}")
+    append_startup_log(f"Frontend HTML cached: {frontend_index_html is not None}")
     threading.Thread(target=open_browser, daemon=True).start()
     uvicorn.run(
         app,

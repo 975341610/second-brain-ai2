@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
@@ -42,14 +42,20 @@ def resolve_frontend_dist() -> Path | None:
 
 
 frontend_dist = resolve_frontend_dist()
+index_file = frontend_dist / "index.html" if frontend_dist else None
+try:
+    frontend_index_html = index_file.read_text(encoding="utf-8") if index_file and index_file.exists() else None
+except OSError:
+    frontend_index_html = None
 assets_dir = frontend_dist / "assets" if frontend_dist else None
 if assets_dir and assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
 
 def spa_index_response():
-    index_file = frontend_dist / "index.html" if frontend_dist else None
-    return FileResponse(index_file) if index_file and index_file.exists() else JSONResponse({"status": "backend-only"})
+    if frontend_index_html is not None:
+        return HTMLResponse(frontend_index_html)
+    return JSONResponse({"status": "backend-only"})
 
 
 def _ensure_table(connection, table_name: str, create_sql: str) -> None:
