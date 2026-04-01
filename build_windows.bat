@@ -130,7 +130,11 @@ if exist "%LocalAppData%\Programs\Python\Python312\python.exe" set "PY_CMD=%Loca
 goto :eof
 
 :resolve_app_version
-for /f %%V in ('"%PY_CMD%" -c "from backend.version import APP_VERSION; print(APP_VERSION)"') do set "APP_VERSION=%%V"
+set "APP_VERSION="
+for /f "usebackq tokens=2 delims==" %%V in (`findstr /b /c:"APP_VERSION =" "%ROOT%backend\version.py"`) do set "APP_VERSION=%%~V"
+set "APP_VERSION=%APP_VERSION: =%"
+set "APP_VERSION=%APP_VERSION:"=%"
+set "APP_VERSION=%APP_VERSION:'=%"
 goto :eof
 
 :resolve_npm
