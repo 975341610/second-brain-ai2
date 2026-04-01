@@ -47,6 +47,11 @@ if assets_dir and assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
 
+def spa_index_response():
+    index_file = frontend_dist / "index.html" if frontend_dist else None
+    return FileResponse(index_file) if index_file and index_file.exists() else JSONResponse({"status": "backend-only"})
+
+
 def _ensure_table(connection, table_name: str, create_sql: str) -> None:
     inspector = inspect(connection)
     if table_name not in inspector.get_table_names():
@@ -95,17 +100,17 @@ def run_migrations() -> None:
         _ensure_column(connection, "note_templates", "note_type", "note_type VARCHAR(50) DEFAULT 'note'")
         _ensure_column(connection, "note_templates", "default_title", "default_title VARCHAR(255) DEFAULT '未命名笔记'")
         _ensure_column(connection, "note_templates", "default_content", "default_content TEXT DEFAULT ''")
-        _ensure_column(connection, "note_templates", "metadata_json", "metadata_json TEXT DEFAULT '{}'" )
+        _ensure_column(connection, "note_templates", "metadata_json", "metadata_json TEXT DEFAULT '{}'")
         _ensure_column(connection, "note_templates", "created_at", "created_at DATETIME")
         _ensure_column(connection, "note_templates", "updated_at", "updated_at DATETIME")
-        _ensure_column(connection, "app_settings", "value", "value TEXT DEFAULT '{}'" )
+        _ensure_column(connection, "app_settings", "value", "value TEXT DEFAULT '{}'")
         _ensure_column(connection, "app_settings", "updated_at", "updated_at DATETIME")
         _ensure_column(connection, "update_states", "channel", "channel VARCHAR(20) DEFAULT 'stable'")
         _ensure_column(connection, "update_states", "current_version", f"current_version VARCHAR(50) DEFAULT '{APP_VERSION}'")
         _ensure_column(connection, "update_states", "staged_version", "staged_version VARCHAR(50)")
         _ensure_column(connection, "update_states", "package_path", "package_path VARCHAR(500)")
         _ensure_column(connection, "update_states", "package_kind", "package_kind VARCHAR(50)")
-        _ensure_column(connection, "update_states", "manifest_json", "manifest_json TEXT DEFAULT '{}'" )
+        _ensure_column(connection, "update_states", "manifest_json", "manifest_json TEXT DEFAULT '{}'")
         _ensure_column(connection, "update_states", "status", "status VARCHAR(50) DEFAULT 'idle'")
         _ensure_column(connection, "update_states", "last_error", "last_error TEXT DEFAULT ''")
         _ensure_column(connection, "update_states", "updated_at", "updated_at DATETIME")
@@ -126,9 +131,13 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/", response_model=None)
+async def spa_root():
+    return spa_index_response()
+
+
 @app.get("/{full_path:path}", response_model=None)
 async def spa(full_path: str):
-    index_file = frontend_dist / "index.html" if frontend_dist else None
-    if index_file and index_file.exists() and not full_path.startswith("api") and full_path != "health":
-        return FileResponse(index_file)
-    return FileResponse(index_file) if index_file and index_file.exists() else JSONResponse({"status": "backend-only"})
+    if full_path.startswith("api") or full_path == "health":
+        return JSONResponse({"status": "backend-only"})
+    return spa_index_response()
