@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import threading
 import time
@@ -16,7 +17,9 @@ from backend.version import APP_VERSION
 
 
 NO_BROWSER_ENV = "SECOND_BRAIN_AI_NO_BROWSER"
-APP_URL = "http://127.0.0.1:8765"
+APP_HOST = "127.0.0.1"
+APP_PORT = 8765
+APP_URL = f"http://{APP_HOST}:{APP_PORT}"
 LOG_FILE_NAME = "startup-error.log"
 _DEVNULL_READER = None
 _DEVNULL_WRITER = None
@@ -65,6 +68,12 @@ def show_startup_error(message: str) -> None:
         pass
 
 
+def is_port_in_use(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex((host, port)) == 0
+
+
 def wait_for_server(timeout_seconds: float = 25.0) -> bool:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
@@ -87,15 +96,21 @@ def open_browser() -> None:
 def main() -> None:
     ensure_stdio()
     append_startup_log(f"Starting Second Brain AI {APP_VERSION}")
+    append_startup_log(f"PID: {os.getpid()}")
     append_startup_log(f"Runtime dir: {runtime_dir()}")
     append_startup_log(f"Frontend dir: {frontend_dist if frontend_dist else 'missing'}")
     append_startup_log(f"Frontend index exists: {bool(frontend_dist and (frontend_dist / 'index.html').exists())}")
     append_startup_log(f"Frontend HTML cached: {frontend_index_html is not None}")
+    if is_port_in_use(APP_HOST, APP_PORT):
+        show_startup_error(
+            f"{APP_HOST}:{APP_PORT} 已被占用。\n\n请先关闭旧的 SecondBrainAI.exe 进程，或结束占用该端口的程序后再重试。\n\n日志文件：{log_path()}"
+        )
+        return
     threading.Thread(target=open_browser, daemon=True).start()
     uvicorn.run(
         app,
-        host="127.0.0.1",
-        port=8765,
+        host=APP_HOST,
+        port=APP_PORT,
         server_header=False,
         headers=[("X-App-Version", APP_VERSION)],
         log_config=None,
