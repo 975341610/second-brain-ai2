@@ -12,6 +12,7 @@ from backend.api.routes import router
 from backend.config import get_settings, runtime_root
 from backend.database import Base, SessionLocal, engine
 from backend.sample_data import seed_database, seed_files
+from backend.version import APP_VERSION
 
 
 settings = get_settings()
@@ -32,32 +33,69 @@ assets_dir = frontend_dist / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+
+def _ensure_table(connection, table_name: str, create_sql: str) -> None:
+    inspector = inspect(connection)
+    if table_name not in inspector.get_table_names():
+        connection.execute(text(create_sql))
+
+
+def _ensure_column(connection, table_name: str, column_name: str, definition: str) -> None:
+    inspector = inspect(connection)
+    columns = {column["name"] for column in inspector.get_columns(table_name)} if table_name in inspector.get_table_names() else set()
+    if column_name not in columns:
+        connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {definition}"))
+
+
 def run_migrations() -> None:
-    inspector = inspect(engine)
     with engine.begin() as connection:
-        if "notebooks" not in inspector.get_table_names():
-            connection.execute(text("CREATE TABLE notebooks (id INTEGER PRIMARY KEY, name VARCHAR(255) UNIQUE, created_at DATETIME)"))
-        notebook_columns = {column["name"] for column in inspector.get_columns("notebooks")} if "notebooks" in inspector.get_table_names() else set()
-        if "icon" not in notebook_columns:
-            connection.execute(text("ALTER TABLE notebooks ADD COLUMN icon VARCHAR(500) DEFAULT '📒'"))
-        if "deleted_at" not in notebook_columns:
-            connection.execute(text("ALTER TABLE notebooks ADD COLUMN deleted_at DATETIME"))
-        note_columns = {column["name"] for column in inspector.get_columns("notes")} if "notes" in inspector.get_table_names() else set()
-        if "notebook_id" not in note_columns:
-            connection.execute(text("ALTER TABLE notes ADD COLUMN notebook_id INTEGER"))
-        if "position" not in note_columns:
-            connection.execute(text("ALTER TABLE notes ADD COLUMN position INTEGER DEFAULT 0"))
-        if "icon" not in note_columns:
-            connection.execute(text("ALTER TABLE notes ADD COLUMN icon VARCHAR(500) DEFAULT '📝'"))
-        if "deleted_at" not in note_columns:
-            connection.execute(text("ALTER TABLE notes ADD COLUMN deleted_at DATETIME"))
-        task_columns = {column["name"] for column in inspector.get_columns("tasks")} if "tasks" in inspector.get_table_names() else set()
-        if "priority" not in task_columns:
-            connection.execute(text("ALTER TABLE tasks ADD COLUMN priority VARCHAR(20) DEFAULT 'medium'"))
-        if "task_type" not in task_columns:
-            connection.execute(text("ALTER TABLE tasks ADD COLUMN task_type VARCHAR(50) DEFAULT 'work'"))
-        if "deadline" not in task_columns:
-            connection.execute(text("ALTER TABLE tasks ADD COLUMN deadline DATETIME"))
+        _ensure_table(connection, "notebooks", "CREATE TABLE notebooks (id INTEGER PRIMARY KEY, name VARCHAR(255) UNIQUE, created_at DATETIME)")
+        _ensure_table(connection, "tasks", "CREATE TABLE tasks (id INTEGER PRIMARY KEY, title VARCHAR(255), status VARCHAR(20) DEFAULT 'todo', created_at DATETIME)")
+        _ensure_table(connection, "notes", "CREATE TABLE notes (id INTEGER PRIMARY KEY, title VARCHAR(255), content TEXT, summary TEXT DEFAULT '', tags VARCHAR(500) DEFAULT '', created_at DATETIME, updated_at DATETIME)")
+        _ensure_table(connection, "model_configs", "CREATE TABLE model_configs (id INTEGER PRIMARY KEY, provider VARCHAR(50) DEFAULT 'openclaw', api_key VARCHAR(255) DEFAULT '', base_url VARCHAR(255) DEFAULT '', model_name VARCHAR(255) DEFAULT 'glm-4.7-flash', updated_at DATETIME)")
+        _ensure_table(connection, "note_templates", "CREATE TABLE note_templates (id INTEGER PRIMARY KEY, name VARCHAR(255) UNIQUE, description TEXT DEFAULT '', icon VARCHAR(500) DEFAULT '📝', note_type VARCHAR(50) DEFAULT 'note', default_title VARCHAR(255) DEFAULT '未命名笔记', default_content TEXT DEFAULT '', metadata_json TEXT DEFAULT '{}', created_at DATETIME, updated_at DATETIME)")
+        _ensure_table(connection, "app_settings", "CREATE TABLE app_settings (key VARCHAR(100) PRIMARY KEY, value TEXT DEFAULT '{}', updated_at DATETIME)")
+        _ensure_table(connection, "update_states", f"CREATE TABLE update_states (id INTEGER PRIMARY KEY, channel VARCHAR(20) DEFAULT 'stable', current_version VARCHAR(50) DEFAULT '{APP_VERSION}', staged_version VARCHAR(50), package_path VARCHAR(500), package_kind VARCHAR(50), manifest_json TEXT DEFAULT '{{}}', status VARCHAR(50) DEFAULT 'idle', last_error TEXT DEFAULT '', updated_at DATETIME)")
+
+        _ensure_column(connection, "notebooks", "icon", "icon VARCHAR(500) DEFAULT '📒'")
+        _ensure_column(connection, "notebooks", "deleted_at", "deleted_at DATETIME")
+
+        _ensure_column(connection, "notes", "notebook_id", "notebook_id INTEGER")
+        _ensure_column(connection, "notes", "position", "position INTEGER DEFAULT 0")
+        _ensure_column(connection, "notes", "icon", "icon VARCHAR(500) DEFAULT '📝'")
+        _ensure_column(connection, "notes", "deleted_at", "deleted_at DATETIME")
+        _ensure_column(connection, "notes", "note_type", "note_type VARCHAR(50) DEFAULT 'note'")
+        _ensure_column(connection, "notes", "template_id", "template_id INTEGER")
+        _ensure_column(connection, "notes", "is_private", "is_private BOOLEAN DEFAULT 0")
+        _ensure_column(connection, "notes", "journal_date", "journal_date VARCHAR(20)")
+        _ensure_column(connection, "notes", "period_type", "period_type VARCHAR(20)")
+        _ensure_column(connection, "notes", "start_at", "start_at DATETIME")
+        _ensure_column(connection, "notes", "end_at", "end_at DATETIME")
+
+        _ensure_column(connection, "tasks", "priority", "priority VARCHAR(20) DEFAULT 'medium'")
+        _ensure_column(connection, "tasks", "task_type", "task_type VARCHAR(50) DEFAULT 'work'")
+        _ensure_column(connection, "tasks", "deadline", "deadline DATETIME")
+
+        _ensure_column(connection, "model_configs", "updated_at", "updated_at DATETIME")
+        _ensure_column(connection, "note_templates", "description", "description TEXT DEFAULT ''")
+        _ensure_column(connection, "note_templates", "icon", "icon VARCHAR(500) DEFAULT '📝'")
+        _ensure_column(connection, "note_templates", "note_type", "note_type VARCHAR(50) DEFAULT 'note'")
+        _ensure_column(connection, "note_templates", "default_title", "default_title VARCHAR(255) DEFAULT '未命名笔记'")
+        _ensure_column(connection, "note_templates", "default_content", "default_content TEXT DEFAULT ''")
+        _ensure_column(connection, "note_templates", "metadata_json", "metadata_json TEXT DEFAULT '{}'")
+        _ensure_column(connection, "note_templates", "created_at", "created_at DATETIME")
+        _ensure_column(connection, "note_templates", "updated_at", "updated_at DATETIME")
+        _ensure_column(connection, "app_settings", "value", "value TEXT DEFAULT '{}'")
+        _ensure_column(connection, "app_settings", "updated_at", "updated_at DATETIME")
+        _ensure_column(connection, "update_states", "channel", "channel VARCHAR(20) DEFAULT 'stable'")
+        _ensure_column(connection, "update_states", "current_version", f"current_version VARCHAR(50) DEFAULT '{APP_VERSION}'")
+        _ensure_column(connection, "update_states", "staged_version", "staged_version VARCHAR(50)")
+        _ensure_column(connection, "update_states", "package_path", "package_path VARCHAR(500)")
+        _ensure_column(connection, "update_states", "package_kind", "package_kind VARCHAR(50)")
+        _ensure_column(connection, "update_states", "manifest_json", "manifest_json TEXT DEFAULT '{}'")
+        _ensure_column(connection, "update_states", "status", "status VARCHAR(50) DEFAULT 'idle'")
+        _ensure_column(connection, "update_states", "last_error", "last_error TEXT DEFAULT ''")
+        _ensure_column(connection, "update_states", "updated_at", "updated_at DATETIME")
 
 
 @app.on_event("startup")

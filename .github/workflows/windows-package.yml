@@ -29,6 +29,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Resolve app version
+        shell: powershell
+        run: |
+          $version = python -c "from backend.version import APP_VERSION; print(APP_VERSION)"
+          if ([string]::IsNullOrWhiteSpace($version)) { throw 'Failed to resolve APP_VERSION from backend.version' }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup --no-progress -y
@@ -78,16 +85,101 @@ jobs:
           Copy-Item windows/README-Windows.txt $portableDir
           "PORTABLE_DIR=$portableDir" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Smoke test packaged app
+        shell: powershell
+        run: |
+          $env:SECOND_BRAIN_AI_NO_BROWSER = '1'
+          $appExe = Join-Path $env:PORTABLE_DIR 'SecondBrainAI.exe'
+          if (!(Test-Path $appExe)) { throw "Packaged executable not found: $appExe" }
+
+          $process = Start-Process -FilePath $appExe -PassThru
+          try {
+            $health = $null
+            for ($i = 0; $i -lt 40; $i++) {
+              try {
+                $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/health' -TimeoutSec 2
+                if ($health.status -eq 'ok') { break }
+              } catch {}
+              Start-Sleep -Milliseconds 500
+            }
+            if ($null -eq $health -or $health.status -ne 'ok') {
+              throw 'Packaged app health endpoint did not become ready'
+            }
+
+            $appInfo = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/app-info' -TimeoutSec 5
+            if ($appInfo.version -ne $env:APP_VERSION) {
+              throw "App version mismatch. Expected $env:APP_VERSION but got $($appInfo.version)"
+            }
+
+            $spa = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -TimeoutSec 5
+            if ($spa.Content -notmatch '<!doctype html>|<html') {
+              throw 'Packaged app root did not return the frontend entrypoint'
+            }
+          } finally {
+            if ($process -and !$process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
+
       - name: Build Setup.exe
         shell: powershell
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (!(Test-Path $iscc)) { $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe" }
-          & $iscc "/DSourceDir=$env:PORTABLE_DIR" "/DOutputDirValue=$env:RUNNER_TEMP" installer.iss
+          & $iscc "/DMyAppVersion=$env:APP_VERSION" "/DSourceDir=$env:PORTABLE_DIR" "/DOutputDirValue=$env:RUNNER_TEMP" installer.iss
 
       - name: Archive portable app
         shell: powershell
         run: Compress-Archive -Path "$env:PORTABLE_DIR\*" -DestinationPath "$env:RUNNER_TEMP\SecondBrainAI-portable.zip" -Force
+
+      - name: Generate update manifest
+        shell: powershell
+        run: |
+          $portableZip = "$env:RUNNER_TEMP\SecondBrainAI-portable.zip"
+          $setupExe = "$env:RUNNER_TEMP\Setup.exe"
+          $manifest = @{
+            version = $env:APP_VERSION
+            packages = @(
+              @{
+                kind = 'portable_zip'
+                file = 'SecondBrainAI-portable.zip'
+                sha256 = (Get-FileHash $portableZip -Algorithm SHA256).Hash.ToLower()
+                size_bytes = (Get-Item $portableZip).Length
+              },
+              @{
+                kind = 'setup_exe'
+                file = 'Setup.exe'
+                sha256 = (Get-FileHash $setupExe -Algorithm SHA256).Hash.ToLower()
+                size_bytes = (Get-Item $setupExe).Length
+              }
+            )
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -Path "$env:RUNNER_TEMP\update-manifest.json" -Encoding UTF8
+
+      - name: Validate packaged artifacts
+        shell: powershell
+        run: |
+          $portableZip = "$env:RUNNER_TEMP\SecondBrainAI-portable.zip"
+          $setupExe = "$env:RUNNER_TEMP\Setup.exe"
+          $manifestPath = "$env:RUNNER_TEMP\update-manifest.json"
+
+          foreach ($path in @($portableZip, $setupExe, $manifestPath)) {
+            if (!(Test-Path $path)) { throw "Missing build artifact: $path" }
+          }
+
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $env:APP_VERSION) {
+            throw "Manifest version mismatch. Expected $env:APP_VERSION but got $($manifest.version)"
+          }
+
+          $portable = $manifest.packages | Where-Object { $_.kind -eq 'portable_zip' }
+          $setup = $manifest.packages | Where-Object { $_.kind -eq 'setup_exe' }
+          if ($null -eq $portable -or $portable.file -ne 'SecondBrainAI-portable.zip') {
+            throw 'Manifest missing portable_zip entry'
+          }
+          if ($null -eq $setup -or $setup.file -ne 'Setup.exe') {
+            throw 'Manifest missing setup_exe entry'
+          }
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
@@ -96,6 +188,7 @@ jobs:
           path: |
             ${{ runner.temp }}/Setup.exe
             ${{ runner.temp }}/SecondBrainAI-portable.zip
+            ${{ runner.temp }}/update-manifest.json
           if-no-files-found: error
 
       - name: Publish tag release assets
@@ -105,4 +198,5 @@ jobs:
           files: |
             ${{ runner.temp }}/Setup.exe
             ${{ runner.temp }}/SecondBrainAI-portable.zip
+            ${{ runner.temp }}/update-manifest.json
           generate_release_notes: true

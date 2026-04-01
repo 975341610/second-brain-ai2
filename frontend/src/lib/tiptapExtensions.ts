@@ -1,4 +1,4 @@
-import { Node } from '@tiptap/core';
+import { mergeAttributes, Node } from '@tiptap/core';
 import Image from '@tiptap/extension-image';
 import { TableCell as BaseTableCell } from '@tiptap/extension-table-cell';
 import { TableHeader as BaseTableHeader } from '@tiptap/extension-table-header';
@@ -138,14 +138,87 @@ export const EmbedNode = Node.create({
   },
 });
 
+
+const normalizeJournalKind = (kind?: string | null, state?: string | null) => {
+  const nextKind = String(kind || '').trim();
+  if (nextKind === 'task' || nextKind === 'note' || nextKind === 'event') return nextKind;
+  const legacyState = String(state || '').trim();
+  if (legacyState === 'note' || legacyState === 'event') return legacyState;
+  return 'task';
+};
+
+const normalizeJournalState = (state?: string | null) => {
+  const nextState = String(state || '').trim();
+  if (nextState === 'done' || nextState === 'migrated') return nextState;
+  return 'open';
+};
+
+export const JournalItemNode = Node.create({
+  name: 'journalItem',
+  group: 'block',
+  content: 'inline*',
+  defining: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      kind: {
+        default: 'task',
+        parseHTML: (element: HTMLElement) => normalizeJournalKind(element.getAttribute('data-bullet-kind'), element.getAttribute('data-bullet-state')),
+        renderHTML: (attributes: { kind?: string; state?: string }) => ({ 'data-bullet-kind': normalizeJournalKind(attributes.kind, attributes.state) }),
+      },
+      state: {
+        default: 'open',
+        parseHTML: (element: HTMLElement) => normalizeJournalState(element.getAttribute('data-bullet-state')),
+        renderHTML: (attributes: { state?: string }) => ({ 'data-bullet-state': normalizeJournalState(attributes.state) }),
+      },
+    };
+  },
+  parseHTML() {
+    return [
+      { tag: 'div[data-journal-item]' },
+      { tag: 'li[data-bullet-state]' },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-journal-item': 'true', class: 'journal-item' }), 0];
+  },
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const { state } = this.editor;
+        const { $from } = state.selection;
+        for (let depth = $from.depth; depth >= 0; depth -= 1) {
+          const node = $from.node(depth);
+          if (node.type.name !== this.name) continue;
+          return this.editor
+            .chain()
+            .focus()
+            .insertContentAt($from.after(depth), {
+              type: this.name,
+              attrs: {
+                kind: normalizeJournalKind(node.attrs.kind, node.attrs.state),
+                state: normalizeJournalState(node.attrs.state),
+              },
+              content: [{ type: 'text', text: '' }],
+            })
+            .run();
+        }
+        return false;
+      },
+    };
+  },
+});
+
 export const CalloutNode = Node.create({
   name: 'callout',
   group: 'block',
   content: 'inline*',
+  defining: true,
+  draggable: true,
   parseHTML() {
     return [{ tag: 'div[data-callout]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-callout': 'true', class: 'callout-block' }, 0];
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-callout': 'true', class: 'callout-block' }), 0];
   },
 });

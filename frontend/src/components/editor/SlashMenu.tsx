@@ -21,7 +21,13 @@ export function SlashMenu({ visible, menuRef, listRef, position, query, items, a
       <div className="mb-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-500">/{query || '输入关键字筛选命令'}</div>
       <div ref={listRef} className="max-h-72 space-y-1 overflow-y-auto">
         {items.map((item, index) => (
-          <button data-slash-index={index} key={`${item.group}-${item.label}`} onClick={() => onPick(item.action)} className={`block w-full rounded-xl px-3 py-2 text-left text-sm ${index === activeIndex ? 'bg-stone-900 text-white' : 'hover:bg-stone-100'}`}>
+          <button
+            data-slash-index={index}
+            key={`${item.group}-${item.label}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onPick(item.action)}
+            className={`block w-full rounded-xl px-3 py-2 text-left text-sm ${index === activeIndex ? 'bg-stone-900 text-white' : 'hover:bg-stone-100'}`}
+          >
             <div className="text-[11px] uppercase tracking-[0.18em] opacity-60">{item.group}</div>
             <div>/{renderLabel(item.label)}</div>
             <div className="mt-1 text-xs opacity-70">{item.description}</div>

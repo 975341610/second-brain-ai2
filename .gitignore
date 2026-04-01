@@ -6,8 +6,10 @@ backend/chroma_store/
 backend/second_brain.db
 frontend/node_modules/
 frontend/dist/
+frontend_dist/
 frontend/*.tsbuildinfo
 frontend/*.d.ts
 frontend/*.js
 frontend/.env
 .env
+.tmp-update-test/

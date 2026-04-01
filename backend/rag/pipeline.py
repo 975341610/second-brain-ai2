@@ -27,10 +27,12 @@ def rerank_results(results: list[dict[str, Any]], query: str) -> list[dict[str, 
     return sorted(results, key=lambda item: item["score"], reverse=True)
 
 
-async def search_knowledge(query: str, ai_client: AIClient, top_k: int | None = None) -> list[dict[str, Any]]:
+async def search_knowledge(query: str, ai_client: AIClient, top_k: int | None = None, excluded_note_ids: set[int] | None = None) -> list[dict[str, Any]]:
     settings = get_settings()
     embedding = await ai_client.embed(query)
     results = vector_store.search(embedding, top_k=top_k or settings.top_k)
+    if excluded_note_ids:
+        results = [item for item in results if int(item["metadata"].get("note_id") or 0) not in excluded_note_ids]
     return rerank_results(results, query)
 
 

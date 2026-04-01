@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from backend.models.db_models import ModelConfig, Note, Notebook, NoteLink, Task
+from backend.models.db_models import AppSetting, ModelConfig, Note, Notebook, NoteLink, NoteTemplate, Task, UpdateState
 
 
 DEFAULT_NOTEBOOK_NAME = "快速笔记"
+WORKSPACE_SETTINGS_KEY = "workspace"
+_UNSET = object()
+
+
+def _json_loads(value: str | None, fallback: Any) -> Any:
+    if not value:
+        return fallback
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return fallback
 
 
 def list_notebooks(db: Session) -> list[Notebook]:
@@ -320,3 +333,172 @@ def update_model_config(db: Session, provider: str, api_key: str, base_url: str,
     db.commit()
     db.refresh(config)
     return config
+
+
+def list_note_templates(db: Session) -> list[NoteTemplate]:
+    return list(db.scalars(select(NoteTemplate).order_by(NoteTemplate.updated_at.desc(), NoteTemplate.id.desc())))
+
+
+def get_note_template(db: Session, template_id: int) -> NoteTemplate | None:
+    return db.get(NoteTemplate, template_id)
+
+
+def create_note_template(
+    db: Session,
+    name: str,
+    description: str = "",
+    icon: str = "📝",
+    note_type: str = "note",
+    default_title: str = "未命名笔记",
+    default_content: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> NoteTemplate:
+    template = NoteTemplate(
+        name=name.strip(),
+        description=description,
+        icon=icon,
+        note_type=note_type,
+        default_title=default_title,
+        default_content=default_content,
+        metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+def update_note_template(
+    db: Session,
+    template_id: int,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    icon: str | None = None,
+    note_type: str | None = None,
+    default_title: str | None = None,
+    default_content: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> NoteTemplate | None:
+    template = db.get(NoteTemplate, template_id)
+    if not template:
+        return None
+    if name is not None:
+        template.name = name.strip()
+    if description is not None:
+        template.description = description
+    if icon is not None:
+        template.icon = icon
+    if note_type is not None:
+        template.note_type = note_type
+    if default_title is not None:
+        template.default_title = default_title
+    if default_content is not None:
+        template.default_content = default_content
+    if metadata is not None:
+        template.metadata_json = json.dumps(metadata, ensure_ascii=False)
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+def delete_note_template(db: Session, template_id: int) -> bool:
+    template = db.get(NoteTemplate, template_id)
+    if not template:
+        return False
+    db.delete(template)
+    db.commit()
+    return True
+
+
+def template_to_dict(template: NoteTemplate) -> dict[str, Any]:
+    return {
+        "id": template.id,
+        "name": template.name,
+        "description": template.description,
+        "icon": template.icon,
+        "note_type": template.note_type,
+        "default_title": template.default_title,
+        "default_content": template.default_content,
+        "metadata": _json_loads(template.metadata_json, {}),
+        "created_at": template.created_at,
+        "updated_at": template.updated_at,
+    }
+
+
+def get_workspace_settings(db: Session) -> dict[str, Any]:
+    setting = db.get(AppSetting, WORKSPACE_SETTINGS_KEY)
+    if not setting:
+        return {}
+    return _json_loads(setting.value, {})
+
+
+def update_workspace_settings(db: Session, data: dict[str, Any]) -> dict[str, Any]:
+    setting = db.get(AppSetting, WORKSPACE_SETTINGS_KEY)
+    if not setting:
+        setting = AppSetting(key=WORKSPACE_SETTINGS_KEY)
+    setting.value = json.dumps(data, ensure_ascii=False)
+    db.add(setting)
+    db.commit()
+    db.refresh(setting)
+    return _json_loads(setting.value, {})
+
+
+def get_or_create_update_state(db: Session) -> UpdateState:
+    state = db.get(UpdateState, 1)
+    if not state:
+        state = UpdateState(id=1)
+        db.add(state)
+        db.commit()
+        db.refresh(state)
+    return state
+
+
+def update_update_state(
+    db: Session,
+    *,
+    channel: str | object = _UNSET,
+    current_version: str | object = _UNSET,
+    staged_version: str | None | object = _UNSET,
+    package_path: str | None | object = _UNSET,
+    package_kind: str | None | object = _UNSET,
+    manifest: dict[str, Any] | None | object = _UNSET,
+    status: str | object = _UNSET,
+    last_error: str | object = _UNSET,
+) -> UpdateState:
+    state = get_or_create_update_state(db)
+    if channel is not _UNSET:
+        state.channel = str(channel)
+    if current_version is not _UNSET:
+        state.current_version = str(current_version)
+    if staged_version is not _UNSET:
+        state.staged_version = staged_version
+    if package_path is not _UNSET:
+        state.package_path = package_path
+    if package_kind is not _UNSET:
+        state.package_kind = package_kind
+    if manifest is not _UNSET:
+        state.manifest_json = json.dumps(manifest or {}, ensure_ascii=False)
+    if status is not _UNSET:
+        state.status = str(status)
+    if last_error is not _UNSET:
+        state.last_error = str(last_error)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    return state
+
+
+def update_state_to_dict(state: UpdateState) -> dict[str, Any]:
+    return {
+        "channel": state.channel,
+        "current_version": state.current_version,
+        "staged_version": state.staged_version,
+        "package_path": state.package_path,
+        "package_kind": state.package_kind,
+        "manifest": _json_loads(state.manifest_json, {}),
+        "status": state.status,
+        "last_error": state.last_error,
+        "updated_at": state.updated_at,
+    }

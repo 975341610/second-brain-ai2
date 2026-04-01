@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     sqlite_url: str = Field(default=f"sqlite:///{(runtime_root() / 'data' / 'second_brain.db').as_posix()}")
     chroma_path: str = Field(default=(runtime_root() / "data" / "chroma_store").as_posix())
+    workspace_path: str = Field(default=(runtime_root() / "data" / "workspace").as_posix())
+    update_staging_path: str = Field(default=(runtime_root() / "data" / "updates").as_posix())
+    plugin_packages_path: str = Field(default=(runtime_root() / "data" / "plugins").as_posix())
+    theme_assets_path: str = Field(default=(runtime_root() / "data" / "themes").as_posix())
     default_provider: str = "openclaw"
     default_model: str = "glm-4.7-flash"
     openclaw_api_key: str = ""
@@ -40,4 +44,10 @@ def get_settings() -> Settings:
     settings = Settings()
     Path(settings.sqlite_url.replace("sqlite:///", "")).parent.mkdir(parents=True, exist_ok=True)
     Path(settings.chroma_path).mkdir(parents=True, exist_ok=True)
+    Path(settings.workspace_path).mkdir(parents=True, exist_ok=True)
+    Path(settings.update_staging_path).mkdir(parents=True, exist_ok=True)
+    Path(settings.plugin_packages_path).mkdir(parents=True, exist_ok=True)
+    Path(settings.theme_assets_path).mkdir(parents=True, exist_ok=True)
+    (Path(settings.workspace_path) / ".trash").mkdir(parents=True, exist_ok=True)
+    (Path(settings.workspace_path) / ".meta").mkdir(parents=True, exist_ok=True)
     return settings

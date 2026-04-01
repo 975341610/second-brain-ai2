@@ -5,11 +5,16 @@ from sqlalchemy.orm import Session
 from backend.agent.tools import create_task_tool, list_tasks_tool, search_knowledge_tool
 from backend.models.schemas import AgentResponse
 from backend.services.ai_client import AIClient
+from backend.services.local_workspace import workspace_store
 from backend.services.repositories import get_or_create_model_config
 
 
+def private_note_ids() -> set[int]:
+    return {note["id"] for note in workspace_store.list_notes(include_deleted=True) if note.get("is_private")}
+
+
 async def run_agent(db: Session, goal: str, ai_client: AIClient) -> AgentResponse:
-    evidence = await search_knowledge_tool(db, ai_client, goal)
+    evidence = await search_knowledge_tool(db, ai_client, goal, excluded_note_ids=private_note_ids())
     config = get_or_create_model_config(db)
     llm_config = {
         "provider": config.provider,

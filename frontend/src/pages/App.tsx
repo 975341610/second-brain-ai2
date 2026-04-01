@@ -1,12 +1,15 @@
-import { CheckCircle2, Bot, FileText, Info, MessageSquareText, X, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { AssistantPanel } from '../components/AssistantPanel';
-import { EditorPanel } from '../components/EditorPanel';
+import { CalendarRange, CheckCircle2, Bot, FileText, Info, X, XCircle } from 'lucide-react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import type React from 'react';
 import { HomeDashboard } from '../components/HomeDashboard';
-import { SettingsPanel } from '../components/SettingsPanel';
 import { Sidebar } from '../components/Sidebar';
 import { useAppStore } from '../store/useAppStore';
-import type { OutlineItem } from '../lib/types';
+import type { NoteTemplate, OutlineItem } from '../lib/types';
+
+const AssistantPanel = lazy(() => import('../components/AssistantPanel').then((module) => ({ default: module.AssistantPanel })));
+const EditorPanel = lazy(() => import('../components/EditorPanel').then((module) => ({ default: module.EditorPanel })));
+const SettingsPanel = lazy(() => import('../components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })));
+
 
 function extractOutline(content: string): OutlineItem[] {
   const doc = new DOMParser().parseFromString(content, 'text/html');
@@ -22,15 +25,56 @@ function extractReferences(content: string): string[] {
   return Array.from(text.matchAll(/\[\[([^\]]+)\]\]/g)).map((match) => match[1]);
 }
 
+function TimelinePage({ items, onSelectNote }: { items: ReturnType<typeof useAppStore.getState>['timelineItems']; onSelectNote: (noteId: number) => void }) {
+  return (
+    <section className="app-panel rounded-[28px] p-6 shadow-soft backdrop-blur">
+      <div className="mb-5 flex items-center gap-2 text-sm font-medium app-text-secondary"><CalendarRange size={16} /> 时间轴</div>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => item.note_id && onSelectNote(item.note_id)}
+            className="app-surface-muted flex w-full items-start gap-4 rounded-[22px] p-4 text-left"
+          >
+            <div className="app-surface-soft rounded-2xl px-3 py-2 text-lg">{item.icon || '📝'}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] app-text-muted">
+                <span>{item.item_type === 'task' ? '任务' : item.note_type || '笔记'}</span>
+                {item.status && <span>{item.status}</span>}
+              </div>
+              <div className="mt-1 truncate text-sm font-medium">{item.title}</div>
+              <div className="mt-2 text-xs app-text-secondary">{new Date(item.timestamp).toLocaleString('zh-CN')}</div>
+            </div>
+          </button>
+        ))}
+        {items.length === 0 && <div className="app-surface-muted rounded-[22px] p-5 text-sm app-text-secondary">时间轴里还没有事件。</div>}
+      </div>
+    </section>
+  );
+}
+
+function PanelSkeleton({ label }: { label: string }) {
+  return (
+    <div className="app-panel rounded-[24px] p-6 shadow-soft backdrop-blur">
+      <div className="text-sm app-text-secondary">正在加载{label}...</div>
+    </div>
+  );
+}
+
 export default function App() {
   const [mobileTab, setMobileTab] = useState<'notes' | 'editor'>('editor');
-  const [activePage, setActivePage] = useState<'home' | 'notes' | 'settings'>('home');
+  const [activePage, setActivePage] = useState<'home' | 'notes' | 'timeline' | 'settings'>('home');
   const [showAssistantCard, setShowAssistantCard] = useState(false);
+  const [templateId, setTemplateId] = useState<number | ''>('');
   const {
+    appInfo,
     notes,
     notebooks,
     trash,
     tasks,
+    templates,
+    plugins,
+    timelineItems,
     selectedNoteId,
     selectedNoteIds,
     recentNoteIds,
@@ -42,9 +86,17 @@ export default function App() {
     isUploading,
     toast,
     modelConfig,
+    workspaceSettings,
+    privateVault,
+    updateState,
+    updateAvailability,
     loadInitialData,
     saveNote,
     createDraftNote,
+    createJournalNote,
+    createNoteFromTemplate,
+    saveTemplate,
+    deleteTemplate,
     createNotebook,
     updateNotebook,
     deleteNotebook,
@@ -64,6 +116,14 @@ export default function App() {
     askAssistant,
     uploadFiles,
     updateModelConfig,
+    updateWorkspaceSettings,
+    unlockPrivateVault,
+    lockPrivateVault,
+    checkUpdateAvailability,
+    uploadOfflineUpdate,
+    stageUpdatePackage,
+    applyUpdatePackage,
+    rollbackUpdatePackage,
     startNewChat,
     setActiveChatSession,
     clearActiveChat,
@@ -85,22 +145,38 @@ export default function App() {
 
   const selectedNote = useMemo(() => notes.find((note) => note.id === selectedNoteId) || null, [notes, selectedNoteId]);
   const recentNotes = useMemo(() => recentNoteIds.map((id) => notes.find((note) => note.id === id)).filter(Boolean) as typeof notes, [recentNoteIds, notes]);
-  const relatedNotes = useMemo(() => notes.filter((note) => selectedNote?.links.includes(note.id)).slice(0, 5), [notes, selectedNote]);
+  const relatedNotes = useMemo(() => notes.filter((note) => !note.is_private && selectedNote?.links.includes(note.id)).slice(0, 5), [notes, selectedNote]);
   const outline = useMemo(() => extractOutline(selectedNote?.content || ''), [selectedNote?.content]);
   const references = useMemo(() => extractReferences(selectedNote?.content || ''), [selectedNote?.content]);
   const toastIcon = toast?.tone === 'success' ? <CheckCircle2 size={16} /> : toast?.tone === 'error' ? <XCircle size={16} /> : <Info size={16} />;
-  const toastClasses = toast?.tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : toast?.tone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-stone-200 bg-white text-stone-700';
+  const toastClasses = toast?.tone === 'success' ? 'app-toast-success' : toast?.tone === 'error' ? 'app-toast-error' : 'app-toast-info';
   const mobileTabs = [
     { key: 'notes', label: '笔记', icon: FileText },
     { key: 'editor', label: '编辑', icon: FileText },
   ] as const;
+  const templateOptions = templates.filter((template) => template.note_type !== 'template');
+  const customThemeVars = useMemo(() => ({
+    '--custom-paper': workspaceSettings.custom_theme.paper,
+    '--custom-panel-bg': workspaceSettings.custom_theme.panel_bg,
+    '--custom-surface-bg': workspaceSettings.custom_theme.surface_bg,
+    '--custom-border-color': workspaceSettings.custom_theme.border_color,
+    '--custom-text-primary': workspaceSettings.custom_theme.text_primary,
+    '--custom-text-secondary': workspaceSettings.custom_theme.text_secondary,
+    '--custom-text-muted': workspaceSettings.custom_theme.text_muted,
+    '--custom-accent-strong': workspaceSettings.custom_theme.accent_strong,
+    '--custom-accent-contrast': workspaceSettings.custom_theme.accent_contrast,
+    '--app-font-family': workspaceSettings.font_mode === 'serif' ? 'Georgia, serif' : workspaceSettings.font_mode === 'mono' ? '"IBM Plex Mono", monospace' : '"IBM Plex Sans", sans-serif',
+    '--app-heading-font-family': workspaceSettings.font_mode === 'mono' ? '"IBM Plex Mono", monospace' : workspaceSettings.font_mode === 'sans' ? '"IBM Plex Sans", sans-serif' : 'Georgia, serif',
+  } as React.CSSProperties), [workspaceSettings.custom_theme, workspaceSettings.font_mode]);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(248,214,135,0.45),_transparent_35%),linear-gradient(135deg,_#f4efe4,_#d9e7df_55%,_#f7f4ee)] p-4 text-stone-900 lg:p-6">
+    <main className="app-shell min-h-screen p-4 lg:p-6" data-theme={workspaceSettings.theme_mode} data-wallpaper={workspaceSettings.wallpaper} data-motion={workspaceSettings.motion_mode} data-density={workspaceSettings.density} style={customThemeVars}>
       <div className="mx-auto mb-4 flex max-w-[1680px] items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-xs font-medium">
-          {isUploading && <span className="rounded-full bg-amber-600 px-3 py-2 text-white">文件导入中</span>}
-          {loading && <span className="rounded-full bg-emerald-700 px-3 py-2 text-white">AI 正在处理中</span>}
+          {isUploading && <span className="app-chip-warning rounded-full px-3 py-2">文件导入中</span>}
+          {loading && <span className="app-chip-success rounded-full px-3 py-2">AI 正在处理中</span>}
+          {privateVault.unlocked && <span className="app-chip-accent rounded-full px-3 py-2">私密保险箱已解锁</span>}
+          {updateAvailability.update_available && <span className="app-chip-info rounded-full px-3 py-2">发现新版本 {updateAvailability.latest_version}</span>}
         </div>
         {toast && <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-soft ${toastClasses}`}>{toastIcon}<span>{toast.text}</span><button onClick={clearToast} className="ml-1 opacity-70"><X size={14} /></button></div>}
       </div>
@@ -108,7 +184,7 @@ export default function App() {
       <div className="mx-auto mb-4 grid max-w-[1680px] grid-cols-4 gap-2 xl:hidden">
         {mobileTabs.map((tab) => {
           const Icon = tab.icon;
-          return <button key={tab.key} onClick={() => setMobileTab(tab.key)} className={`rounded-2xl px-3 py-3 text-sm font-medium ${mobileTab === tab.key ? 'bg-stone-900 text-white' : 'bg-white/70 text-stone-600'}`}><div className="flex items-center justify-center gap-2"><Icon size={15} /> {tab.label}</div></button>;
+          return <button key={tab.key} onClick={() => setMobileTab(tab.key)} className={`rounded-2xl px-3 py-3 text-sm font-medium ${mobileTab === tab.key ? 'app-primary-button' : 'app-surface-muted app-text-secondary'}`}><div className="flex items-center justify-center gap-2"><Icon size={15} /> {tab.label}</div></button>;
         })}
       </div>
 
@@ -132,14 +208,31 @@ export default function App() {
             onUpdateNote={(noteId, payload) => {
               const note = notes.find((item) => item.id === noteId);
               if (!note) return;
-              void saveNote({ id: note.id, title: payload.title ?? note.title, content: note.content, icon: payload.icon ?? note.icon });
+              void saveNote({
+                id: note.id,
+                title: payload.title ?? note.title,
+                content: note.content,
+                icon: payload.icon ?? note.icon,
+                noteType: note.note_type,
+                templateId: note.template_id,
+                isPrivate: note.is_private,
+                journalDate: note.journal_date,
+                periodType: note.period_type,
+                startAt: note.start_at,
+                endAt: note.end_at,
+              });
             }}
             onUpdateNotebook={(notebookId, payload) => void updateNotebook(notebookId, payload)}
             onDeleteNotebook={(notebookId) => void deleteNotebook(notebookId)}
             onRestoreNotebook={(notebookId) => void restoreNotebook(notebookId)}
             onPurgeNotebook={(notebookId) => void purgeNotebook(notebookId)}
             onCreateNoteInNotebook={(notebookId) => createDraftNote(notebookId)}
-            onMoveNote={(noteId, notebookId, position) => void moveNote(noteId, notebookId, position)}
+            onCreateChildNote={(noteId) => {
+              const parent = notes.find((item) => item.id === noteId);
+              if (!parent) return;
+              createDraftNote(parent.notebook_id ?? undefined, noteId);
+            }}
+            onMoveNote={(noteId, notebookId, position, parentId) => void moveNote(noteId, notebookId, position, parentId)}
             onBulkMoveNotes={(notebookId) => void bulkMoveNotes(notebookId)}
             onBulkDeleteNotes={() => void bulkDeleteNotes()}
             onDeleteNote={(noteId) => void deleteNote(noteId)}
@@ -150,11 +243,76 @@ export default function App() {
         </div>
 
         <div className="min-h-0 grid gap-4">
-          {activePage === 'home' && <HomeDashboard recentNotes={recentNotes} tasks={tasks} assistant={assistant} modelConfig={modelConfig} sessions={chatSessions} activeSessionId={activeChatSessionId} onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} onAsk={askAssistant} onCreateTask={createTask} onUpdateTaskStatus={updateTaskStatus} onStartNewChat={startNewChat} onSwitchSession={setActiveChatSession} onClearSession={clearActiveChat} onRenameSession={renameChatSession} onDeleteSession={deleteChatSession} />}
-          {activePage === 'settings' && <SettingsPanel modelConfig={modelConfig} onUpdateModelConfig={updateModelConfig} />}
+          {activePage === 'home' && (
+            <HomeDashboard
+              recentNotes={recentNotes}
+              tasks={tasks}
+              assistant={assistant}
+              modelConfig={modelConfig}
+              sessions={chatSessions}
+              activeSessionId={activeChatSessionId}
+              layout={workspaceSettings.home_layout}
+              onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }}
+              onOpenSettings={() => setActivePage('settings')}
+              onAsk={askAssistant}
+              onCreateTask={createTask}
+              onUpdateTaskStatus={updateTaskStatus}
+              onStartNewChat={startNewChat}
+              onSwitchSession={setActiveChatSession}
+              onClearSession={clearActiveChat}
+              onRenameSession={renameChatSession}
+              onDeleteSession={deleteChatSession}
+              onReorderBoards={(layout) => void updateWorkspaceSettings({ ...workspaceSettings, home_layout: layout })}
+            />
+          )}
+          {activePage === 'timeline' && <TimelinePage items={timelineItems} onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }} />}
+          {activePage === 'settings' && (
+            <Suspense fallback={<PanelSkeleton label="设置面板" />}>
+              <SettingsPanel
+                appInfo={appInfo}
+                modelConfig={modelConfig}
+                templates={templates}
+                plugins={plugins}
+                workspaceSettings={workspaceSettings}
+                privateVault={privateVault}
+                updateState={updateState}
+                updateAvailability={updateAvailability}
+                onUpdateModelConfig={updateModelConfig}
+                onUpdateWorkspaceSettings={updateWorkspaceSettings}
+                onUnlockPrivateVault={unlockPrivateVault}
+                onLockPrivateVault={lockPrivateVault}
+                onSaveTemplate={saveTemplate}
+                onDeleteTemplate={deleteTemplate}
+                onCheckUpdateAvailability={checkUpdateAvailability}
+                onUploadOfflineUpdate={uploadOfflineUpdate}
+                onStageUpdatePackage={stageUpdatePackage}
+                onApplyUpdatePackage={applyUpdatePackage}
+                onRollbackUpdatePackage={rollbackUpdatePackage}
+              />
+            </Suspense>
+          )}
+
           {activePage === 'notes' && (
-            <div className={mobileTab === 'editor' ? 'block' : 'hidden xl:block'}>
-                <EditorPanel note={selectedNote} isSaving={isSavingNote} onSave={saveNote} outline={outline} references={references} relatedNotes={relatedNotes} />
+            <div className="grid gap-4">
+              <div className="app-panel rounded-[24px] p-4 shadow-soft backdrop-blur">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={() => void createJournalNote('daily', { notebookId: selectedNote?.notebook_id ?? notebooks[0]?.id ?? null, parentId: null, isPrivate: false })} className="app-secondary-button rounded-2xl px-4 py-2 text-sm">今日日志</button>
+                  <button onClick={() => void createJournalNote('weekly', { notebookId: selectedNote?.notebook_id ?? notebooks[0]?.id ?? null, parentId: null, isPrivate: false })} className="app-secondary-button rounded-2xl px-4 py-2 text-sm">本周周记</button>
+                  <button onClick={() => void createJournalNote('monthly', { notebookId: selectedNote?.notebook_id ?? notebooks[0]?.id ?? null, parentId: null, isPrivate: false })} className="app-secondary-button rounded-2xl px-4 py-2 text-sm">本月月记</button>
+                  <select value={templateId} onChange={(event) => setTemplateId(event.target.value ? Number(event.target.value) : '')} className="app-select rounded-2xl px-3 py-2 text-sm">
+                    <option value="">从模板创建笔记</option>
+                    {templateOptions.map((template: NoteTemplate) => <option key={template.id} value={template.id}>{template.icon} {template.name}</option>)}
+                  </select>
+                  <button onClick={() => templateId && void createNoteFromTemplate(Number(templateId), { notebookId: selectedNote?.notebook_id ?? notebooks[0]?.id ?? null, parentId: null })} className="app-primary-button rounded-2xl px-4 py-2 text-sm">创建</button>
+                  {selectedNote && !selectedNote.is_draft && <button onClick={() => void saveTemplate({ name: `${selectedNote.title} 模板`, icon: selectedNote.icon, note_type: selectedNote.note_type || 'note', default_title: selectedNote.title, default_content: selectedNote.content, metadata: { is_private: selectedNote.is_private, journal_date: selectedNote.journal_date, period_type: selectedNote.period_type } })} className="app-secondary-button rounded-2xl px-4 py-2 text-sm">保存为模板</button>}
+                  {selectedNote && <button onClick={() => void saveNote({ id: selectedNote.id, title: selectedNote.title, content: selectedNote.content, icon: selectedNote.icon, noteType: selectedNote.note_type || 'note', templateId: selectedNote.template_id ?? null, isPrivate: !selectedNote.is_private, journalDate: selectedNote.journal_date ?? null, periodType: selectedNote.period_type ?? null, startAt: selectedNote.start_at ?? null, endAt: selectedNote.end_at ?? null })} className={`rounded-2xl px-4 py-2 text-sm ${selectedNote.is_private ? 'app-chip-accent' : 'app-secondary-button'}`}>{selectedNote.is_private ? '取消私密' : '设为私密'}</button>}
+                </div>
+              </div>
+              <div className={mobileTab === 'editor' ? 'block' : 'hidden xl:block'}>
+                <Suspense fallback={<PanelSkeleton label="编辑器" />}>
+                  <EditorPanel note={selectedNote} isSaving={isSavingNote} onSave={saveNote} outline={outline} references={references} relatedNotes={relatedNotes} templates={templates} />
+                </Suspense>
+              </div>
             </div>
           )}
         </div>
@@ -162,7 +320,7 @@ export default function App() {
 
       {activePage === 'notes' && (
         <>
-          <button onClick={() => setShowAssistantCard((value) => !value)} className="fixed bottom-6 right-6 z-30 rounded-full bg-stone-900 p-4 text-white shadow-soft">
+          <button onClick={() => setShowAssistantCard((value) => !value)} className="app-primary-button fixed bottom-6 right-6 z-30 rounded-full p-4 shadow-soft">
             <Bot size={20} />
           </button>
           {showAssistantCard && (

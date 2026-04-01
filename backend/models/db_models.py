@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
+from backend.version import APP_VERSION
 
 
 class Notebook(Base):
@@ -18,6 +19,21 @@ class Notebook(Base):
     notes: Mapped[list["Note"]] = relationship(back_populates="notebook")
 
 
+class NoteTemplate(Base):
+    __tablename__ = "note_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    icon: Mapped[str] = mapped_column(String(500), default="📝")
+    note_type: Mapped[str] = mapped_column(String(50), default="note")
+    default_title: Mapped[str] = mapped_column(String(255), default="未命名笔记")
+    default_content: Mapped[str] = mapped_column(Text, default="")
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Note(Base):
     __tablename__ = "notes"
 
@@ -29,6 +45,13 @@ class Note(Base):
     tags: Mapped[str] = mapped_column(String(500), default="")
     notebook_id: Mapped[int | None] = mapped_column(ForeignKey("notebooks.id", ondelete="SET NULL"), nullable=True, index=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
+    note_type: Mapped[str] = mapped_column(String(50), default="note")
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("note_templates.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False)
+    journal_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    period_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -76,4 +99,27 @@ class ModelConfig(Base):
     api_key: Mapped[str] = mapped_column(String(255), default="")
     base_url: Mapped[str] = mapped_column(String(255), default="")
     model_name: Mapped[str] = mapped_column(String(255), default="glm-4.7-flash")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UpdateState(Base):
+    __tablename__ = "update_states"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    channel: Mapped[str] = mapped_column(String(20), default="stable")
+    current_version: Mapped[str] = mapped_column(String(50), default=APP_VERSION)
+    staged_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    package_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    package_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    manifest_json: Mapped[str] = mapped_column(Text, default="{}")
+    status: Mapped[str] = mapped_column(String(50), default="idle")
+    last_error: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
