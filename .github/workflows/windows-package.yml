@@ -15,8 +15,38 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --include=dev --legacy-peer-deps
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          CI: false
+        run: npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
   build-windows:
     runs-on: windows-latest
+    needs: build-frontend
 
     steps:
       - name: Checkout
@@ -32,16 +62,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install and build frontend
-        working-directory: frontend
-        shell: powershell
-        env:
-          CI: false
-          NPM_CONFIG_PRODUCTION: false
-        run: |
-          npm ci --include=dev --legacy-peer-deps
-          if (!(Test-Path "node_modules/.bin/vite.cmd")) { throw "vite.cmd missing after frontend install" }
-          .\node_modules\.bin\vite.cmd build
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
 
       - name: Install backend build dependencies
         shell: powershell
