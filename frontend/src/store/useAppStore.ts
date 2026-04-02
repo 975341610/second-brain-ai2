@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { openDB, type IDBPDatabase } from 'idb';
 import { api } from '../lib/api';
 import { PRESET_TEMPLATES } from '../lib/templates';
 import type {
@@ -28,6 +27,44 @@ const pendingNoteSyncTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const pendingNoteSavePayloads = new Map<number, SaveNotePayload>();
 const NOTE_SYNC_RETRY_MS = 3000;
 let noteSyncOnlineListenerAttached = false;
+
+function openIndexedDb(name: string, version: number, upgrade: (db: IDBDatabase) => void): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name, version);
+    request.onupgradeneeded = () => upgrade(request.result);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error(`Failed to open IndexedDB database: ${name}`));
+  });
+}
+
+async function runReadonlyTransaction<T>(db: IDBDatabase, storeName: string, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const store = tx.objectStore(storeName);
+    const request = action(store);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error(`IndexedDB readonly transaction failed for ${storeName}`));
+    tx.onerror = () => reject(tx.error ?? new Error(`IndexedDB readonly transaction failed for ${storeName}`));
+  });
+}
+
+async function runReadwriteTransaction(db: IDBDatabase, storeName: string, action: (store: IDBObjectStore) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+
+    try {
+      action(store);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error(`IndexedDB readwrite transaction failed for ${storeName}`));
+    tx.onabort = () => reject(tx.error ?? new Error(`IndexedDB readwrite transaction aborted for ${storeName}`));
+  });
+}
 
 function collectDescendantIds(notes: Note[], rootId: number): Set<number> {
   const ids = new Set<number>();
@@ -68,39 +105,41 @@ const STORE_CONFIG = 'config';
 const PENDING_NOTE_SYNC_QUEUE_ID = 'pending-note-sync-queue';
 
 async function initDB() {
-  return openDB(DB_NAME, 1, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE_NOTES)) db.createObjectStore(STORE_NOTES, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(STORE_NOTEBOOKS)) db.createObjectStore(STORE_NOTEBOOKS, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(STORE_TASKS)) db.createObjectStore(STORE_TASKS, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(STORE_CONFIG)) db.createObjectStore(STORE_CONFIG, { keyPath: 'id' });
-    },
+  return openIndexedDb(DB_NAME, 1, (db) => {
+    if (!db.objectStoreNames.contains(STORE_NOTES)) db.createObjectStore(STORE_NOTES, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORE_NOTEBOOKS)) db.createObjectStore(STORE_NOTEBOOKS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORE_TASKS)) db.createObjectStore(STORE_TASKS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORE_CONFIG)) db.createObjectStore(STORE_CONFIG, { keyPath: 'id' });
   });
 }
 
 async function getCachedData<T>(storeName: string): Promise<T[]> {
   const db = await initDB();
-  return db.getAll(storeName);
+  return runReadonlyTransaction(db, storeName, (store) => store.getAll()) as Promise<T[]>;
 }
 
 async function setCachedData<T>(storeName: string, items: T[]) {
   const db = await initDB();
-  const tx = db.transaction(storeName, 'readwrite');
-  await tx.store.clear();
-  for (const item of items) {
-    await tx.store.put(item);
-  }
-  await tx.done;
+  await runReadwriteTransaction(db, storeName, (store) => {
+    store.clear();
+    for (const item of items) {
+      store.put(item);
+    }
+  });
 }
 
 async function setCachedItem<T>(storeName: string, item: T) {
   const db = await initDB();
-  await db.put(storeName, item);
+  await runReadwriteTransaction(db, storeName, (store) => {
+    store.put(item);
+  });
 }
 
 async function deleteCachedItem(storeName: string, id: number) {
   const db = await initDB();
-  await db.delete(storeName, id);
+  await runReadwriteTransaction(db, storeName, (store) => {
+    store.delete(id);
+  });
 }
 
 type SaveNotePayload = {
