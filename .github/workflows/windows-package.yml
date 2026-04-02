@@ -29,13 +29,24 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci --include=dev --legacy-peer-deps
+        env:
+          NODE_ENV: development
+          NPM_CONFIG_PRODUCTION: 'false'
+          NPM_CONFIG_OMIT: ''
+        run: npm ci --legacy-peer-deps
+
+      - name: Verify frontend toolchain
+        working-directory: frontend
+        run: |
+          test -x node_modules/.bin/vite
+          node_modules/.bin/vite --version
 
       - name: Build frontend
         working-directory: frontend
         env:
           CI: false
-        run: npm run build
+          NODE_ENV: development
+        run: node_modules/.bin/vite build
 
       - name: Upload frontend artifact
         uses: actions/upload-artifact@v4
