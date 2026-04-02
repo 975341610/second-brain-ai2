@@ -17,8 +17,6 @@
     "@tiptap/extension-bubble-menu": "^3.20.4",
     "@tiptap/extension-bullet-list": "^3.21.0",
     "@tiptap/extension-code-block-lowlight": "^3.20.4",
-    "@tiptap/extension-drag-handle": "^3.20.4",
-    "@tiptap/extension-drag-handle-react": "^3.20.4",
     "@tiptap/extension-floating-menu": "^3.20.4",
     "@tiptap/extension-heading": "^3.21.0",
     "@tiptap/extension-highlight": "^3.20.4",

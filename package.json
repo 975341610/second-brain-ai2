@@ -11,7 +11,7 @@
     "build:win": "npm run build:frontend && npm run build:backend && npm run build:electron && npm run copy:frontend && npm run build:builder",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
-    "build:frontend": "cd frontend && npm install && npm run build",
+    "build:frontend": "npm --prefix frontend install --include=dev --legacy-peer-deps && npm --prefix frontend run build",
     "build:backend": "node scripts/run_python.js scripts/build_backend.py",
     "build:electron": "electron-vite build",
     "copy:frontend": "node scripts/copy_frontend.js",
