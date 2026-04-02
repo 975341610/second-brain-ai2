@@ -35,7 +35,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         shell: powershell
-        run: npm install --include=dev --legacy-peer-deps
+        run: npm ci --include=dev --legacy-peer-deps
 
       - name: Build frontend
         working-directory: frontend
@@ -52,7 +52,7 @@ jobs:
 
       - name: Install root desktop dependencies
         shell: powershell
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: Build Windows desktop packages
         shell: powershell
