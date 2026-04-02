@@ -33,8 +33,16 @@ jobs:
           python-version: '3.11'
 
       - name: Install frontend dependencies
+        working-directory: frontend
         shell: powershell
-        run: npm --prefix frontend install --include=dev --legacy-peer-deps
+        run: npm install --include=dev --legacy-peer-deps
+
+      - name: Build frontend
+        working-directory: frontend
+        shell: powershell
+        env:
+          CI: false
+        run: npm run build
 
       - name: Install backend build dependencies
         shell: powershell

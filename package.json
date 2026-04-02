@@ -8,7 +8,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run build:frontend && npm run build:backend && electron-vite build && node scripts/copy_frontend.js && electron-builder",
-    "build:win": "npm run build:frontend && npm run build:backend && npm run build:electron && npm run copy:frontend && npm run build:builder",
+    "build:win": "npm run build:backend && npm run build:electron && npm run copy:frontend && npm run build:builder",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "build:frontend": "npm --prefix frontend run build",
