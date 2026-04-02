@@ -1,3 +1,5 @@
+export type NoteSyncStatus = 'synced' | 'queued' | 'saving' | 'error';
+
 export type NoteProperty = {
   id: number;
   note_id: number;
@@ -22,7 +24,10 @@ export type Note = {
   created_at: string;
   deleted_at?: string | null;
   is_draft?: boolean;
+  sync_status?: NoteSyncStatus;
+  sync_error?: string | null;
 };
+
 
 export type OutlineItem = {
   id: string;

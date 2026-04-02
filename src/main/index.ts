@@ -1,6 +1,7 @@
 import log from 'electron-log';
 import { app, BrowserWindow, Tray, Menu, ipcMain, dialog, nativeImage } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { autoUpdater } from 'electron-updater';
 import { SidecarManager } from './sidecar';
 import { spawn } from 'child_process';
@@ -17,21 +18,49 @@ process.on('unhandledRejection', (reason) => {
   log.error('Unhandled Rejection:', reason);
 });
 
-
-// 确保 backend 路径计算准确
 const getBackendPath = () => {
   if (isDev) {
     return path.join(app.getAppPath(), 'backend');
   }
-  // 生产环境下 backend 可执行文件通常在 resources/backend 目录
   return path.join(process.resourcesPath, 'backend');
 };
 
 const sidecar = new SidecarManager(getBackendPath(), isDev);
 
-// 初始化自动更新
+function logStartupContext() {
+  const backendPath = getBackendPath();
+  const rendererIndexPath = path.join(__dirname, '../renderer/index.html');
+  const splashPath = path.join(__dirname, '../renderer/splash.html');
+  const preloadPath = path.join(__dirname, '../preload/index.js');
+
+  log.info('App startup diagnostics', {
+    isDev,
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    userDataPath: app.getPath('userData'),
+    logsPath: app.getPath('logs'),
+    resourcesPath: process.resourcesPath,
+    backendPath,
+    backendPathExists: fs.existsSync(backendPath),
+    backendEntries: fs.existsSync(backendPath) ? fs.readdirSync(backendPath).slice(0, 20) : [],
+    rendererIndexPath,
+    rendererIndexExists: fs.existsSync(rendererIndexPath),
+    splashPath,
+    splashExists: fs.existsSync(splashPath),
+    preloadPath,
+    preloadExists: fs.existsSync(preloadPath),
+  });
+}
+
+function showStartupError(title: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const logsPath = app.getPath('logs');
+  log.error(`${title}:`, error);
+  dialog.showErrorBox(title, `${message}\n\n日志目录: ${logsPath}`);
+}
+
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = false; // 询问用户后再下载
+  autoUpdater.autoDownload = false;
 
   autoUpdater.on('checking-for-update', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-message', 'Checking for update...');
@@ -61,7 +90,6 @@ function setupAutoUpdater() {
   ipcMain.handle('download-update', () => autoUpdater.downloadUpdate());
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
 
-  // 本地离线更新机制
   ipcMain.handle('install-local-update', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: '选择本地更新包 (.exe)',
@@ -72,14 +100,13 @@ function setupAutoUpdater() {
     if (canceled || filePaths.length === 0) return { success: false, message: '已取消' };
 
     const updatePath = filePaths[0];
-    
+
     try {
-      // 启动安装程序并退出当前应用
       spawn(updatePath, [], {
         detached: true,
         stdio: 'ignore'
       }).unref();
-      
+
       app.quit();
       return { success: true };
     } catch (err: any) {
@@ -97,12 +124,10 @@ function handleIPC() {
 }
 
 function createTray() {
-  const iconPath = isDev 
+  const iconPath = isDev
     ? path.join(app.getAppPath(), 'resources/icon.png')
     : path.join(__dirname, '../../resources/icon.png');
-  
-  // Check if icon exists, else use empty image to prevent crash
-  const fs = require('fs');
+
   const trayIcon = fs.existsSync(iconPath) ? iconPath : nativeImage.createEmpty();
   try {
     tray = new Tray(trayIcon);
@@ -135,16 +160,21 @@ function createSplashWindow() {
     }
   });
 
+  splashWindow.webContents.on('did-start-loading', () => {
+    log.info('Splash window started loading');
+  });
+  splashWindow.webContents.on('did-finish-load', () => {
+    log.info('Splash window finished load:', splashWindow?.webContents.getURL());
+  });
+  splashWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    log.error(`Splash window failed to load: ${errorCode} - ${errorDescription} at ${validatedURL}`);
+  });
+
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     splashWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/splash.html`);
   } else {
     splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'));
   }
-
-  // Add error logging
-  splashWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    log.error(`Splash window failed to load: ${errorCode} - ${errorDescription} at ${validatedURL}`);
-  });
 
   splashWindow.on('closed', () => {
     splashWindow = null;
@@ -152,7 +182,7 @@ function createSplashWindow() {
 }
 
 function createWindow() {
-  const iconPath = isDev 
+  const iconPath = isDev
     ? path.join(app.getAppPath(), 'resources/icon.png')
     : path.join(__dirname, '../../resources/icon.png');
 
@@ -160,9 +190,9 @@ function createWindow() {
     width: 1200,
     height: 800,
     frame: false,
-    show: false, // 初始不显示，等待 ready-to-show
+    show: false,
     transparent: true,
-    icon: require('fs').existsSync(iconPath) ? iconPath : undefined,
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -170,7 +200,12 @@ function createWindow() {
     }
   });
 
-  // Add error logging
+  mainWindow.webContents.on('did-start-loading', () => {
+    log.info('Main window started loading');
+  });
+  mainWindow.webContents.on('did-finish-load', () => {
+    log.info('Main window finished load:', mainWindow?.webContents.getURL());
+  });
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
     log.error(`Main window failed to load: ${errorCode} - ${errorDescription} at ${validatedURL}`);
     if (isDev) {
@@ -183,8 +218,10 @@ function createWindow() {
   mainWindow.webContents.on('render-process-gone', (event, details) => {
     log.error(`Main window render process gone: ${details.reason} (${details.exitCode})`);
   });
+  mainWindow.on('unresponsive', () => {
+    log.error('Main window became unresponsive');
+  });
 
-  // Add console message logging
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     log.info(`Renderer Console: [${level}] ${message} (${sourceId}:${line})`);
   });
@@ -196,7 +233,7 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
-    // wait for sidecar to show
+    log.info('Main window ready-to-show');
   });
 
   mainWindow.on('closed', () => {
@@ -205,14 +242,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  logStartupContext();
   createSplashWindow();
   createWindow();
-  
+
   createTray();
   handleIPC();
   setupAutoUpdater();
 
-  // 异步启动 Sidecar，不阻塞主窗口创建过程
   sidecar.start()
     .then(() => {
       log.info('Sidecar started successfully.');
@@ -224,20 +261,18 @@ app.whenReady().then(() => {
       }
     })
     .catch((err) => {
-      log.error('Failed to start sidecar:', err);
-      // 即便后端启动失败，也尝试显示主窗口，以便用户看到界面进行反馈或展示错误提示
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.show();
       }
       if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.close();
       }
+      showStartupError('Second Brain AI 启动失败', err);
     });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
-      // 如果 sidecar 已经在运行，直接显示
       if (sidecar.isAlive()) {
         mainWindow?.show();
       }

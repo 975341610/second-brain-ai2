@@ -1,4 +1,4 @@
-import { BookCopy, ChevronDown, ChevronRight, FolderPlus, Home, Layout, MoreHorizontal, Plus, Search, Settings, Trash2, UploadCloud, X } from 'lucide-react';
+import { AlertCircle, BookCopy, ChevronDown, ChevronRight, FolderPlus, Home, Layout, Lock, MoreHorizontal, Plus, RefreshCw, Search, Settings, Trash2, UploadCloud, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { defaultIconFor, isDataIcon, validateExistingDataIcon, validateIconFile } from '../lib/iconUtils';
 import type { Note, Notebook, Task, TrashState } from '../lib/types';
@@ -21,6 +21,7 @@ type SidebarProps = {
   onCreateNotebook: (name: string) => void;
   onNotify: (message: string) => void;
   onUpdateNote: (noteId: number, payload: { title?: string; icon?: string; tags?: string[] }) => void;
+  onRetryNoteSync: (noteId: number) => void;
   onUpdateNotebook: (notebookId: number, payload: { name?: string; icon?: string }) => void;
   onDeleteNotebook: (notebookId: number) => void;
   onRestoreNotebook: (notebookId: number) => void;
@@ -35,6 +36,20 @@ type SidebarProps = {
   onPurgeTrash: () => void;
   onUpload: (files: File[]) => void;
 };
+
+const PRIVATE_TAGS = new Set(['私密', 'private']);
+
+function isPrivateNote(note: Note) {
+  return note.tags.some((tag) => PRIVATE_TAGS.has(tag.toLowerCase()));
+}
+
+function getDisplayNoteTitle(note: Note) {
+  return isPrivateNote(note) ? '私密笔记' : (note.title || '未命名笔记');
+}
+
+function getDisplayNoteIcon(note: Note) {
+  return isPrivateNote(note) ? '🔒' : (note.icon || defaultIconFor('note'));
+}
 
 export function Sidebar({
   activePage,
@@ -52,6 +67,7 @@ export function Sidebar({
   onCreateNotebook,
   onNotify,
   onUpdateNote,
+  onRetryNoteSync,
   onUpdateNotebook,
   onDeleteNotebook,
   onRestoreNotebook,
@@ -101,7 +117,10 @@ export function Sidebar({
   const filteredNotes = useMemo(
     () =>
       notes.filter((note) => {
-        const matchesQuery = !query || `${note.title} ${note.summary} ${note.content}`.toLowerCase().includes(query.toLowerCase());
+        const searchText = isPrivateNote(note)
+          ? '私密笔记'
+          : `${note.title} ${note.summary} ${note.content}`;
+        const matchesQuery = !query || searchText.toLowerCase().includes(query.toLowerCase());
         const matchesTag = !activeTag || note.tags.includes(activeTag);
         return matchesQuery && matchesTag;
       }),
@@ -121,7 +140,7 @@ export function Sidebar({
   const rootNotesByNotebook = useMemo(() => {
     const grouped = new Map<number, Note[]>();
     notebooks.forEach((notebook) => grouped.set(notebook.id, []));
-    
+
     const rootNotes = notesByParent.get(null) || [];
     rootNotes.forEach((note) => {
       const notebookId = note.notebook_id ?? notebooks[0]?.id;
@@ -130,6 +149,11 @@ export function Sidebar({
     });
     return grouped;
   }, [notesByParent, notebooks]);
+
+  const unsyncedNotes = useMemo(
+    () => notes.filter((note) => note.sync_status === 'queued' || note.sync_status === 'error'),
+    [notes],
+  );
 
   useEffect(() => {
     notebooks.forEach((notebook) => {
@@ -203,6 +227,7 @@ export function Sidebar({
     const noteEditing = editingNoteId === note.id;
     const isSelected = selectedNoteId === note.id;
     const isDragOver = dragOverNoteId === note.id;
+    const canRetrySync = note.sync_status === 'queued' || note.sync_status === 'error';
 
     return (
       <div key={note.id} className="flex flex-col">
@@ -253,8 +278,8 @@ export function Sidebar({
                 />
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="flex-shrink-0 text-xs opacity-70">{renderIcon(note.icon, defaultIconFor('note'))}</span>
-                  <span className="truncate text-xs leading-relaxed">{note.title}</span>
+                  <span className="flex-shrink-0 text-xs opacity-70">{isPrivateNote(note) ? <Lock size={12} /> : renderIcon(getDisplayNoteIcon(note), defaultIconFor('note'))}</span>
+                  <span className="truncate text-xs leading-relaxed">{getDisplayNoteTitle(note)}</span>
                 </div>
               )}
             </div>
@@ -262,14 +287,23 @@ export function Sidebar({
 
           {!noteEditing && (
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onCreateNoteInNotebook(notebookId, note.id); }} 
+              {canRetrySync && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRetryNoteSync(note.id); }}
+                  className="p-1 hover:bg-amber-100 rounded text-amber-700"
+                  title={note.sync_status === 'error' ? '立即重试同步' : '重新加入同步队列'}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onCreateNoteInNotebook(notebookId, note.id); }}
                 className="p-1 hover:bg-reflect-border/50 rounded text-reflect-muted hover:text-reflect-text"
               >
                 <Plus size={12} />
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setActiveNoteMenuId(activeNoteMenuId === note.id ? null : note.id); }} 
+              <button
+                onClick={(e) => { e.stopPropagation(); setActiveNoteMenuId(activeNoteMenuId === note.id ? null : note.id); }}
                 className="p-1 hover:bg-reflect-border/50 rounded text-reflect-muted hover:text-reflect-text"
               >
                 <MoreHorizontal size={12} />
@@ -370,21 +404,48 @@ export function Sidebar({
             </button>
           </div>
 
-          {/* Search Bar - Extremely Minimal */}
-          <div className="px-2">
-            <div className="flex items-center gap-2 bg-reflect-border/20 px-2 py-1.5 rounded-md focus-within:bg-reflect-border/30 transition-all">
-              <Search size={13} className="text-reflect-muted opacity-50" />
-              <input 
-                value={query} 
-                onChange={(event) => setQuery(event.target.value)} 
-                className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-reflect-muted/40" 
-                placeholder="搜索..." 
-              />
-              {query && <X size={11} className="cursor-pointer text-reflect-muted hover:text-reflect-text" onClick={() => setQuery('')} />}
+          {activePage === 'notes' && unsyncedNotes.length > 0 && (
+            <div className="px-2">
+              <div className="rounded-lg border border-amber-200/70 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertCircle size={13} className="shrink-0" />
+                    <span className="truncate">{unsyncedNotes.length} 条笔记等待同步</span>
+                  </div>
+                  <button
+                    onClick={() => unsyncedNotes.forEach((note) => onRetryNoteSync(note.id))}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-amber-900 hover:bg-amber-100 transition-colors"
+                  >
+                    <RefreshCw size={11} />
+                    全部重试
+                  </button>
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {unsyncedNotes.slice(0, 3).map((note) => (
+                    <div key={note.id} className="flex items-center gap-2">
+                      <button
+                        onClick={() => onSelectNote(note.id)}
+                        className="flex-1 truncate text-left hover:underline"
+                      >
+                        {getDisplayNoteTitle(note)}
+                      </button>
+                      <span className="text-[10px] opacity-70">
+                        {note.sync_status === 'error' ? '失败' : '排队中'}
+                      </span>
+                      <button
+                        onClick={() => onRetryNoteSync(note.id)}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] hover:bg-amber-100 transition-colors"
+                      >
+                        <RefreshCw size={10} />
+                        重试
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Notebooks List */}
           <div className="flex-1 overflow-y-auto min-h-0 pr-1 custom-scrollbar">
             {showNotebookCreator && (
               <div className="mx-2 mb-2 p-2 bg-white rounded-lg border border-reflect-border shadow-sm">
@@ -538,7 +599,7 @@ export function Sidebar({
             )}
             {trash.notes.map(note => (
               <div key={note.id} className="flex items-center justify-between group px-1">
-                <span className="truncate opacity-70 flex-1 mr-2">{note.title}</span>
+                <span className="truncate opacity-70 flex-1 mr-2">{getDisplayNoteTitle(note)}</span>
                 <div className="flex items-center gap-2">
                   <button onClick={() => onRestoreNote(note.id)} className="text-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity hover:underline">恢复</button>
                   <button onClick={() => onPurgeNote(note.id)} className="text-rose-700 opacity-0 group-hover:opacity-100 transition-opacity hover:underline">彻底删除</button>

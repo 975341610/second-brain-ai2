@@ -51,6 +51,7 @@ from backend.rag.pipeline import citations_from_results, cosine_similarity, sear
 from backend.services.ai_client import AIClient
 from backend.services.document_service import chunk_text, parse_document
 from backend.services.repositories import (
+    UNSET,
     add_exp,
     create_note,
     create_notebook,
@@ -65,6 +66,8 @@ from backend.services.repositories import (
     get_or_create_inbox_notebook,
     get_or_create_model_config,
     get_or_create_user_stats,
+    is_private_tags,
+    note_is_private,
     list_notes,
     list_notebooks,
     list_trashed_notes,
@@ -101,6 +104,10 @@ async def background_index_note(note_id: int, title: str, content: str, tags: li
     """异步执行 AI 处理：摘要、向量化、自动链接"""
     db = SessionLocal()
     try:
+        if is_private_tags(tags):
+            vector_store.delete_note_chunks(note_id)
+            return
+
         # 获取最新的 AI 配置
         model_config = get_or_create_model_config(db)
         llm_config = {
@@ -148,6 +155,9 @@ async def background_index_note(note_id: int, title: str, content: str, tags: li
         seen_notes = {note_id}
         for item in results:
             target_id = item["metadata"]["note_id"]
+            target_note = db.get(Note, int(target_id)) if target_id else None
+            if note_is_private(target_note):
+                continue
             if target_id not in seen_notes and item["score"] >= 0.2:
                 link_targets.append((target_id, item["score"]))
                 seen_notes.add(target_id)
@@ -170,12 +180,13 @@ async def background_index_note(note_id: int, title: str, content: str, tags: li
 def note_to_response(note: Note) -> NoteResponse:
     links = [link.target_note_id for link in note.links_from]
     properties = [NotePropertyResponse.model_validate(p) for p in note.properties]
+    is_private = note_is_private(note)
     return NoteResponse(
         id=note.id,
         title=note.title,
         icon=note.icon,
         content=note.content,
-        summary=note.summary,
+        summary="内容已锁定" if is_private else note.summary,
         tags=[tag for tag in note.tags.split(",") if tag],
         properties=properties,
         links=links,
@@ -193,22 +204,23 @@ def notebook_to_response(notebook: Notebook) -> NotebookResponse:
 async def persist_note(db: Session, title: str, content: str, background_tasks: BackgroundTasks, notebook_id: int | None = None, icon: str = "\U0001f4dd", parent_id: int | None = None, is_title_manually_edited: bool = False, tags: list[str] | None = None) -> NoteResponse:
     # 1. 快速创建数据库记录
     from backend.database import with_db_retry
-    
+
     @with_db_retry(max_retries=3)
     def do_create():
         nonlocal notebook_id
         notebook_id = notebook_id or get_or_create_default_notebook(db).id
         return create_note(db, title=title, content=content, summary="", tags=tags, notebook_id=notebook_id, icon=icon, parent_id=parent_id, is_title_manually_edited=is_title_manually_edited)
-    
+
     note = do_create()
-    
+
     # 2. 异步执行 AI 任务
-    background_tasks.add_task(
-        background_index_note, 
-        note.id, title, content, 
-        tags, icon, parent_id, is_title_manually_edited
-    )
-    
+    if not is_private_tags(tags):
+        background_tasks.add_task(
+            background_index_note,
+            note.id, title, content,
+            tags, icon, parent_id, is_title_manually_edited
+        )
+
     return note_to_response(note)
 
 @router.post("/notes/quick-capture", response_model=QuickCaptureResponse)
@@ -359,6 +371,8 @@ async def ask_question(payload: AskRequest, db: Session = Depends(get_db)) -> As
     else:
         results = await search_knowledge(payload.question, ai_client=ai_client)
         citations = citations_from_results(db, results)
+        if not citations:
+            return AskResponse(answer="当前没有可用于知识库回答的非私密笔记内容。", citations=[], mode="rag")
         answer = await ai_client.answer(payload.question, citations, llm_config)
         return AskResponse(answer=answer, citations=[Citation(**item) for item in citations], mode="rag")
 
@@ -422,6 +436,19 @@ async def global_chat(payload: AskRequest, db: Session = Depends(get_db)):
     if payload.mode == "rag":
         results = await search_knowledge(payload.question, ai_client=ai_client, top_k=5)
         citations = citations_from_results(db, results)
+        if not citations:
+            async def empty_generate():
+                yield "__CITATIONS__:[]\n"
+                yield "当前没有可用于知识库回答的非私密笔记内容。"
+            return StreamingResponse(
+                empty_generate(),
+                media_type="text/plain",
+                headers={
+                    "X-Accel-Buffering": "no",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive"
+                }
+            )
         citation_block = "\n\n".join(
             f"[{idx + 1}] {item['title']}\n{item['excerpt']}" for idx, item in enumerate(citations)
         )
@@ -543,42 +570,56 @@ def purge_notebook_api(notebook_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/notes", response_model=NoteResponse)
 async def create_note_api(payload: NoteCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> NoteResponse:
-    return await persist_note(db, payload.title, payload.content, background_tasks, payload.notebook_id, payload.icon, payload.parent_id, payload.is_title_manually_edited, payload.tags)
+    try:
+        return await persist_note(db, payload.title, payload.content, background_tasks, payload.notebook_id, payload.icon, payload.parent_id, payload.is_title_manually_edited, payload.tags)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @router.put("/notes/{note_id}", response_model=NoteResponse)
 async def update_note_api(note_id: int, payload: NoteUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> NoteResponse:
     existing = get_note(db, note_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Note not found")
-    
+
     # 1. 快速更新基本信息
     title = payload.title if payload.title is not None else existing.title
     content = payload.content if payload.content is not None else existing.content
     icon = payload.icon if payload.icon is not None else existing.icon
-    parent_id = payload.parent_id if payload.parent_id is not None else existing.parent_id
+    parent_id = payload.parent_id if "parent_id" in payload.model_fields_set else UNSET
     is_title_manually_edited = payload.is_title_manually_edited if payload.is_title_manually_edited is not None else (existing.is_title_manually_edited == 1)
-    tags = payload.tags
-    
+    effective_tags = payload.tags if payload.tags is not None else [tag for tag in existing.tags.split(",") if tag]
+    summary = "" if is_private_tags(effective_tags) else existing.summary
+
     # 同步更新数据库
     from backend.database import with_db_retry
     @with_db_retry(max_retries=3)
     def do_update():
-        return update_note(db, note_id, title, content, existing.summary, tags, icon, parent_id, is_title_manually_edited)
-    
-    note = do_update()
-    
+        return update_note(db, note_id, title, content, summary, payload.tags, icon, parent_id, is_title_manually_edited)
+
+    try:
+        note = do_update()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    resolved_parent_id = note.parent_id
+
     # 2. 异步执行 AI 后台任务
-    background_tasks.add_task(
-        background_index_note,
-        note.id, title, content,
-        tags, icon, parent_id, is_title_manually_edited
-    )
-    
+    if not is_private_tags(effective_tags):
+        background_tasks.add_task(
+            background_index_note,
+            note.id, title, content,
+            payload.tags, icon, resolved_parent_id, is_title_manually_edited
+        )
+
     return note_to_response(note)
 
 @router.patch("/notes/{note_id}/tags", response_model=NoteResponse)
 def update_note_tags_api(note_id: int, tags: list[str], db: Session = Depends(get_db)) -> NoteResponse:
-    note = update_note(db, note_id, tags=tags)
+    note = get_note(db, note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    next_summary = "" if is_private_tags(tags) else note.summary
+    note = update_note(db, note_id, tags=tags, summary=next_summary)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     return note_to_response(note)
@@ -586,7 +627,10 @@ def update_note_tags_api(note_id: int, tags: list[str], db: Session = Depends(ge
 @router.patch("/notes/{note_id}/move", response_model=NoteResponse)
 def move_note_api(note_id: int, payload: NoteMovePayload, db: Session = Depends(get_db)) -> NoteResponse:
     target_notebook_id = payload.notebook_id or get_or_create_default_notebook(db).id
-    note = move_note(db, note_id, target_notebook_id, payload.position, payload.parent_id)
+    try:
+        note = move_note(db, note_id, target_notebook_id, payload.position, payload.parent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     return note_to_response(note)

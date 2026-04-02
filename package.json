@@ -7,11 +7,12 @@
   "scripts": {
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "build": "npm run build:frontend && electron-vite build && node scripts/copy_frontend.js && electron-builder",
-    "build:win": "npm run build:electron && npm run copy:frontend && npm run build:builder",
+    "build": "npm run build:frontend && npm run build:backend && electron-vite build && node scripts/copy_frontend.js && electron-builder",
+    "build:win": "npm run build:frontend && npm run build:backend && npm run build:electron && npm run copy:frontend && npm run build:builder",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "build:frontend": "cd frontend && npm install && npm run build",
+    "build:backend": "node scripts/run_python.js scripts/build_backend.py",
     "build:electron": "electron-vite build",
     "copy:frontend": "node scripts/copy_frontend.js",
     "build:builder": "electron-builder --win"
@@ -23,7 +24,7 @@
     "tree-kill": "^1.2.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "^5.0.4",
     "electron": "^28.2.0",
     "electron-builder": "^24.9.1",
     "electron-vite": "^2.0.0",
@@ -41,7 +42,8 @@
       "target": [
         "nsis",
         "zip"
-      ]
+      ],
+      "sign": false
     },
     "nsis": {
       "oneClick": false,

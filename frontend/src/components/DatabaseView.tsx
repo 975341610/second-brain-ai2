@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Note, NoteProperty } from '../lib/types';
-import { 
-  Table as TableIcon, 
-  Kanban as KanbanIcon, 
-  ChevronDown, 
-  ChevronUp, 
+import {
+  Table as TableIcon,
+  Kanban as KanbanIcon,
+  ChevronDown,
+  ChevronUp,
   Search,
-  Plus
+  Plus,
+  Lock
 } from 'lucide-react';
 
 interface DatabaseViewProps {
@@ -16,9 +17,27 @@ interface DatabaseViewProps {
   onCreateNote: () => void;
 }
 
-export const DatabaseView: React.FC<DatabaseViewProps> = ({ 
-  notes, 
-  onSelectNote, 
+const PRIVATE_TAGS = new Set(['私密', 'private']);
+
+function isPrivateNote(note: Note) {
+  return note.tags.some((tag) => PRIVATE_TAGS.has(tag.toLowerCase()));
+}
+
+function getDisplayTitle(note: Note) {
+  return isPrivateNote(note) ? '私密笔记' : note.title;
+}
+
+function getDisplayIcon(note: Note) {
+  return isPrivateNote(note) ? null : note.icon;
+}
+
+function getDisplayPropertyValue(note: Note, value: string) {
+  return isPrivateNote(note) ? '内容已锁定' : value;
+}
+
+export const DatabaseView: React.FC<DatabaseViewProps> = ({
+  notes,
+  onSelectNote,
   onUpdateNoteProperty,
   onCreateNote
 }) => {
@@ -27,23 +46,26 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
 
   const filteredNotes = useMemo(() => {
-    return notes.filter(note => 
-      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.properties.some(p => p.value.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    return notes.filter(note => {
+      const titleText = getDisplayTitle(note).toLowerCase();
+      const propertyText = isPrivateNote(note)
+        ? '内容已锁定'
+        : note.properties.map((p) => p.value).join(' ').toLowerCase();
+      return titleText.includes(searchQuery.toLowerCase()) || propertyText.includes(searchQuery.toLowerCase());
+    });
   }, [notes, searchQuery]);
 
   const sortedNotes = useMemo(() => {
     if (!sortConfig) return filteredNotes;
     return [...filteredNotes].sort((a, b) => {
-      let aValue: any = a.title;
-      let bValue: any = b.title;
+      let aValue: any = getDisplayTitle(a);
+      let bValue: any = getDisplayTitle(b);
 
       if (sortConfig.key !== 'title') {
         const aProp = a.properties.find(p => p.name === sortConfig.key);
         const bProp = b.properties.find(p => p.name === sortConfig.key);
-        aValue = aProp ? aProp.value : '';
-        bValue = bProp ? bProp.value : '';
+        aValue = getDisplayPropertyValue(a, aProp ? aProp.value : '');
+        bValue = getDisplayPropertyValue(b, bProp ? bProp.value : '');
       }
 
       if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -167,8 +189,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                   <tr key={note.id} className="group hover:bg-white/40 transition-all">
                     <td className="px-6 py-4 whitespace-nowrap bg-white/40 group-hover:bg-white border-y border-l border-reflect-border/20 rounded-l-2xl shadow-sm transition-all">
                       <button onClick={() => onSelectNote(note.id)} className="flex items-center gap-3">
-                        <span className="text-xl grayscale group-hover:grayscale-0 transition-all">{note.icon}</span>
-                        <span className="font-serif text-base italic font-medium text-reflect-text">{note.title}</span>
+                        <span className="text-xl grayscale group-hover:grayscale-0 transition-all">{isPrivateNote(note) ? <Lock size={16} /> : getDisplayIcon(note)}</span>
+                        <span className="font-serif text-base italic font-medium text-reflect-text">{getDisplayTitle(note)}</span>
                       </button>
                     </td>
                     {allPropertyNames.map((name, idx) => {
@@ -179,8 +201,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                           {prop ? (
                             <input 
                               type="text"
-                              value={prop.value}
-                              onChange={(e) => onUpdateNoteProperty(note.id, prop.id, e.target.value)}
+                              value={getDisplayPropertyValue(note, prop.value)}
+                              onChange={(e) => !isPrivateNote(note) && onUpdateNoteProperty(note.id, prop.id, e.target.value)}
+                              readOnly={isPrivateNote(note)}
                               className="bg-transparent border-none focus:ring-0 p-0 w-full text-xs font-medium text-reflect-text/70"
                             />
                           ) : <span className="text-reflect-muted/20">-</span>}
@@ -212,14 +235,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                       className="p-5 bg-white border border-reflect-border/30 rounded-2xl shadow-soft hover:shadow-hover hover:-translate-y-0.5 cursor-pointer transition-all group"
                     >
                       <div className="flex items-center gap-3 mb-4">
-                        <span className="text-xl grayscale group-hover:grayscale-0 transition-all">{note.icon}</span>
-                        <h4 className="font-serif text-base italic font-medium text-reflect-text truncate">{note.title}</h4>
+                        <span className="text-xl grayscale group-hover:grayscale-0 transition-all">{isPrivateNote(note) ? <Lock size={16} /> : getDisplayIcon(note)}</span>
+                        <h4 className="font-serif text-base italic font-medium text-reflect-text truncate">{getDisplayTitle(note)}</h4>
                       </div>
                       <div className="space-y-2">
                         {note.properties.filter(p => p.name.toLowerCase() !== 'status' && p.name !== '状态').slice(0, 3).map(p => (
                           <div key={p.id} className="flex items-center gap-2">
                             <span className="text-[9px] font-bold uppercase tracking-widest text-reflect-muted/40 shrink-0">{p.name}:</span>
-                            <span className="text-[11px] font-medium text-reflect-text/60 truncate">{p.value}</span>
+                            <span className="text-[11px] font-medium text-reflect-text/60 truncate">{getDisplayPropertyValue(note, p.value)}</span>
                           </div>
                         ))}
                       </div>

@@ -5,24 +5,13 @@ title Second Brain AI Windows Builder
 set "ROOT=%~dp0"
 set "OUT_DIR=C:\AI"
 set "APP_DIR=%OUT_DIR%\SecondBrainAI"
-set "SETUP_EXE=%OUT_DIR%\Setup.exe"
-set "VENV_DIR=%ROOT%.venv"
-set "VENV_PY=%VENV_DIR%\Scripts\python.exe"
+set "DIST_DIR=%ROOT%dist"
+set "SETUP_EXE=%DIST_DIR%\Second Brain AI Setup 1.0.0.exe"
+set "PORTABLE_ZIP=%DIST_DIR%\Second Brain AI 1.0.0.zip"
 set "VERSION=unknown"
 if exist "%ROOT%VERSION.txt" (
     for /f "usebackq delims=" %%v in ("%ROOT%VERSION.txt") do set "VERSION=%%v"
 )
-
-echo ==============================================
-echo   Second Brain AI - Windows EXE Builder
-echo   Version: !VERSION!
-echo ==============================================
-echo.
-
-call :resolve_python
-if "%PY_CMD%"=="" call "%ROOT%setup_build_env.bat" --quiet
-call :resolve_python
-if "%PY_CMD%"=="" goto :missing_python
 
 call :resolve_npm
 if "%NPM_CMD%"=="" call "%ROOT%setup_build_env.bat" --quiet
@@ -32,95 +21,57 @@ if "%NPM_CMD%"=="" goto :missing_npm
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 if not exist "%APP_DIR%" mkdir "%APP_DIR%"
 
-echo [1/7] Building frontend...
-pushd "%ROOT%frontend"
-if errorlevel 1 goto :unc_failed
-if not exist node_modules (
-  call :run_npm install
-) else (
-  call :run_npm install
-)
-if errorlevel 1 goto :build_failed
-call :run_npm run build
-if errorlevel 1 goto :build_failed
-popd
-
-echo [2/7] Preparing Python environment...
 pushd "%ROOT%"
 if errorlevel 1 goto :unc_failed
-if not exist "%VENV_PY%" "%PY_CMD%" -m venv "%VENV_DIR%"
-if errorlevel 1 goto :build_failed
-"%VENV_PY%" -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
-if errorlevel 1 goto :build_failed
-"%VENV_PY%" -m pip install -r backend\requirements.txt pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=100
-if errorlevel 1 goto :build_failed
 
-echo [3/7] Staging frontend assets...
-if exist frontend_dist rmdir /s /q frontend_dist
-xcopy /e /i /y frontend\dist frontend_dist >nul
-if errorlevel 1 goto :build_failed
+echo ==============================================
+echo   Second Brain AI - Windows Electron Builder
+echo   Version: !VERSION!
+echo ==============================================
+echo.
 
-echo [4/7] Cleaning old bundle...
-if exist build rmdir /s /q build
-if exist dist rmdir /s /q dist
-
-echo [5/7] Running PyInstaller...
-"%VENV_PY%" -m PyInstaller second_brain_ai.spec --noconfirm --clean
+echo [1/6] Installing root desktop dependencies...
+call :run_npm install --legacy-peer-deps
 if errorlevel 1 goto :build_failed
 
-:: 显式删除根目录下的冗余单体 EXE，以防混淆
-if exist "dist\SecondBrainAI.exe" del /f /q "dist\SecondBrainAI.exe"
+echo [2/6] Building frontend...
+call :run_npm run build:frontend
+if errorlevel 1 goto :build_failed
 
-echo [6/7] Copying app to %APP_DIR% ...
+echo [3/6] Building Python backend sidecar...
+call :run_npm run build:backend
+if errorlevel 1 goto :build_failed
+
+echo [4/6] Building Electron app...
+call :run_npm run build:electron
+if errorlevel 1 goto :build_failed
+
+echo [5/6] Copying frontend assets into Electron output...
+call :run_npm run copy:frontend
+if errorlevel 1 goto :build_failed
+
+echo [6/6] Building Windows installer and portable zip...
+call :run_npm run build:builder
+if errorlevel 1 goto :build_failed
+
 if exist "%APP_DIR%" rmdir /s /q "%APP_DIR%"
 mkdir "%APP_DIR%"
-
-:: 显式删除目标路径下可能残余的旧版单文件 exe (防止运行错误)
-if exist "%APP_DIR%.exe" (
-    echo [*] 正在清理旧版单文件 EXE...
-    del /f /q "%APP_DIR%.exe"
-)
-
-echo [*] 正在同步构建产物...
-echo     - 源路径:   %ROOT%dist\SecondBrainAI
-echo     - 目标路径: %APP_DIR%
-echo     - 版本号:   !VERSION!
-
-xcopy /e /i /y dist\SecondBrainAI "%APP_DIR%" >nul
+xcopy /e /i /y "%DIST_DIR%\win-unpacked\*" "%APP_DIR%" >nul
 if errorlevel 1 goto :build_failed
-copy /y windows\Start SecondBrainAI.bat "%APP_DIR%\Start SecondBrainAI.bat" >nul
-copy /y windows\README-Windows.txt "%APP_DIR%\README-Windows.txt" >nul
 
-echo [7/7] Building Setup.exe installer...
-call :find_inno_setup
-if "%ISCC_EXE%"=="" call "%ROOT%setup_build_env.bat" --quiet
-call :find_inno_setup
-if "%ISCC_EXE%"=="" goto :missing_inno
-if exist "%SETUP_EXE%" del /f /q "%SETUP_EXE%"
-set "INNO_VERSION=!VERSION:v=!"
-"%ISCC_EXE%" /DMyAppVersion="!INNO_VERSION!" "%ROOT%installer.iss"
-if errorlevel 1 goto :build_failed
-popd
+set "SETUP_EXE=%DIST_DIR%\Second Brain AI Setup !VERSION!.exe"
+set "PORTABLE_ZIP=%DIST_DIR%\Second Brain AI !VERSION!.zip"
 
 echo.
 echo Build finished successfully.
-echo EXE: %APP_DIR%\SecondBrainAI.exe
-echo Launcher: %APP_DIR%\Start SecondBrainAI.bat
+echo Portable app: %APP_DIR%\Second Brain AI.exe
 echo Installer: %SETUP_EXE%
+echo Portable zip: %PORTABLE_ZIP%
 echo.
 pause
+popd
 endlocal
 exit /b 0
-
-:resolve_python
-set "PY_CMD="
-where py >nul 2>nul
-if not errorlevel 1 set "PY_CMD=py"
-if defined PY_CMD goto :eof
-if exist "%LocalAppData%\Programs\Python\Python311\python.exe" set "PY_CMD=%LocalAppData%\Programs\Python\Python311\python.exe"
-if defined PY_CMD goto :eof
-if exist "%LocalAppData%\Programs\Python\Python312\python.exe" set "PY_CMD=%LocalAppData%\Programs\Python\Python312\python.exe"
-goto :eof
 
 :resolve_npm
 set "NPM_CMD="
@@ -142,21 +93,6 @@ if "%NPM_CMD%"=="" exit /b 1
 call "%NPM_CMD%" %*
 exit /b %ERRORLEVEL%
 
-:find_inno_setup
-set "ISCC_EXE="
-if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC_EXE=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
-if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC_EXE=%ProgramFiles%\Inno Setup 6\ISCC.exe"
-goto :eof
-
-:missing_python
-echo Python launcher ^(py^) was not found. Please install Python 3.11+ and try again.
-echo Or run: setup_build_env.bat
-echo Download: https://www.python.org/downloads/windows/
-echo.
-pause
-endlocal
-exit /b 1
-
 :unc_failed
 echo Unable to enter the project directory.
 echo If you launched this from a WSL network path, copy the project to a normal Windows path first.
@@ -167,18 +103,8 @@ endlocal
 exit /b 1
 
 :missing_npm
-echo npm was not found. Please install Node.js 20+ and try again.
+echo npm was not found. Please install Node.js LTS and try again.
 echo Or run: setup_build_env.bat
-echo Download: https://nodejs.org/
-echo.
-pause
-endlocal
-exit /b 1
-
-:missing_inno
-echo Inno Setup 6 was not found. Please install it and run build_windows.bat again.
-echo Or run: setup_build_env.bat
-echo Download: https://jrsoftware.org/isinfo.php
 echo.
 pause
 endlocal
@@ -188,11 +114,7 @@ exit /b 1
 echo.
 echo Build failed. Read the errors above, fix them, and run this file again.
 echo.
-if exist "%ROOT%frontend\node_modules\npm" (
-  echo Detected a broken local npm package under frontend\node_modules.
-  echo Delete frontend\node_modules and rerun one_click_install.bat if this keeps happening.
-  echo.
-)
 pause
+popd
 endlocal
 exit /b 1

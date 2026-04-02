@@ -1,4 +1,4 @@
-import { CheckCircle2, Bot, FileText, Info, MessageSquareText, X, XCircle } from 'lucide-react';
+import { CheckCircle2, Bot, FileText, Info, MessageSquareText, RefreshCw, X, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AssistantPanel } from '../components/AssistantPanel';
 import { DatabaseView } from '../components/DatabaseView';
@@ -57,6 +57,7 @@ export default function App() {
     exePath,
     loadInitialData,
     saveNote,
+    retryPendingNoteSync,
     createDraftNote,
     createNotebook,
     updateNotebook,
@@ -143,6 +144,10 @@ export default function App() {
     void loadWallpaper();
   }, [userStats?.wallpaper_url]);
 
+  const unsyncedNotes = useMemo(
+    () => notes.filter((note) => note.sync_status === 'queued' || note.sync_status === 'error'),
+    [notes],
+  );
   const selectedNote = useMemo(() => notes.find((note) => note.id === selectedNoteId) || null, [notes, selectedNoteId]);
   const recentNotes = useMemo(() => recentNoteIds.map((id) => notes.find((note) => note.id === id)).filter(Boolean) as typeof notes, [recentNoteIds, notes]);
   const relatedNotes = useMemo(() => notes.filter((note) => selectedNote?.links.includes(note.id)).slice(0, 5), [notes, selectedNote]);
@@ -239,6 +244,7 @@ export default function App() {
                 is_title_manually_edited: payload.title !== undefined ? true : note.is_title_manually_edited
               });
             }}
+            onRetryNoteSync={(noteId) => void retryPendingNoteSync(noteId)}
             onUpdateNotebook={(notebookId, payload) => void updateNotebook(notebookId, payload)}
             onDeleteNotebook={(notebookId) => void deleteNotebook(notebookId)}
             onRestoreNotebook={(notebookId) => void restoreNotebook(notebookId)}
@@ -258,30 +264,54 @@ export default function App() {
         {/* Content Area */}
         <div className={`flex-1 overflow-auto bg-reflect-bg relative ${wallpaperUrl ? 'bg-transparent' : ''}`}>
           <div className="max-w-5xl mx-auto px-6 py-8 h-full glass-panel">
-            {activePage === 'home' && <HomeDashboard 
-              recentNotes={recentNotes} 
-              tasks={tasks} 
-              assistant={assistant} 
-              modelConfig={modelConfig} 
-              sessions={chatSessions} 
-              activeSessionId={activeChatSessionId} 
+            <div className="pb-3">
+              {unsyncedNotes.length > 0 && (
+                <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-xl border border-amber-200/70 bg-amber-50/85 px-4 py-3 text-[12px] text-amber-900 shadow-sm backdrop-blur-sm">
+                  <div className="min-w-0 truncate">当前有 {unsyncedNotes.length} 条笔记等待同步</div>
+                  <button
+                    onClick={() => unsyncedNotes.forEach((note) => void retryPendingNoteSync(note.id))}
+                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium hover:bg-amber-100 transition-colors"
+                  >
+                    <RefreshCw size={12} />
+                    全部重试
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {activePage === 'home' && <HomeDashboard
+              recentNotes={recentNotes}
+              notes={notes}
+              tasks={tasks}
+              unsyncedNotes={unsyncedNotes}
+              assistant={assistant}
+              modelConfig={modelConfig}
+              sessions={chatSessions}
+              activeSessionId={activeChatSessionId}
               userStats={userStats}
               userAchievements={userAchievements}
               onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }}
-              onAsk={askStreamingAssistant} 
-              onCreateTask={createTask} 
-              onUpdateTaskStatus={updateTaskStatus} 
+              onRetryNoteSync={(noteId) => void retryPendingNoteSync(noteId)}
+              onRetryAllPendingSync={() => unsyncedNotes.forEach((note) => void retryPendingNoteSync(note.id))}
+              onCreateTemplateNote={(templateName) => {
+                createDraftNote(undefined, undefined, templateName);
+                setActivePage('notes');
+                setMobileTab('editor');
+              }}
+              onAsk={askStreamingAssistant}
+              onCreateTask={createTask}
+              onUpdateTaskStatus={updateTaskStatus}
               onDeleteTask={deleteTask}
               onClearCompleted={clearCompletedTasks}
-              onStartNewChat={startNewChat} 
-              onSwitchSession={setActiveChatSession} 
-              onClearSession={clearActiveChat} 
-              onRenameSession={renameChatSession} 
-              onDeleteSession={deleteChatSession} 
+              onStartNewChat={startNewChat}
+              onSwitchSession={setActiveChatSession}
+              onClearSession={clearActiveChat}
+              onRenameSession={renameChatSession}
+              onDeleteSession={deleteChatSession}
             />}
             {activePage === 'database' && (
-              <DatabaseView 
-                notes={notes} 
+              <DatabaseView
+                notes={notes}
                 onSelectNote={(noteId) => { selectNote(noteId); setActivePage('notes'); }}
                 onCreateNote={() => createDraftNote()}
                 onUpdateNoteProperty={async (noteId, propertyId, value) => {
@@ -293,18 +323,19 @@ export default function App() {
             {activePage === 'settings' && <SettingsPanel modelConfig={modelConfig} onUpdateModelConfig={updateModelConfig} />}
             {activePage === 'notes' && (
               <div className={`${mobileTab === 'editor' ? 'block' : 'hidden lg:block'} h-full`}>
-                <EditorPanel 
-                  note={selectedNote} 
+                <EditorPanel
+                  note={selectedNote}
                   notes={notes}
-                  isSaving={isSavingNote} 
-                  onSave={saveNote} 
+                  isSaving={isSavingNote}
+                  onSave={saveNote}
+                  onRetryNoteSync={(noteId) => void retryPendingNoteSync(noteId)}
                   onUpdateTags={updateNoteTags}
                   onCreateSubPage={(parentId) => createDraftNote(selectedNote?.notebook_id, parentId)}
                   onSelectNote={(noteId) => selectNote(noteId)}
                   onNotify={notify}
-                  outline={outline} 
-                  references={references} 
-                  relatedNotes={relatedNotes} 
+                  outline={outline}
+                  references={references}
+                  relatedNotes={relatedNotes}
                 />
               </div>
             )}

@@ -13,7 +13,7 @@ type EditorHeaderProps = {
   isTitleManuallyEdited: boolean;
   breadcrumbs?: Breadcrumb[];
   onSelectBreadcrumb?: (id: number) => void;
-  savePhase: 'idle' | 'queued' | 'saving';
+  savePhase: 'idle' | 'queued' | 'saving' | 'error';
   isDirty: boolean;
   lastSavedAt: string | null;
   showRelations: boolean;
@@ -28,10 +28,10 @@ type EditorHeaderProps = {
 };
 
 export function EditorHeader(props: EditorHeaderProps) {
-  const { 
-    icon, title, isTitleManuallyEdited, breadcrumbs, onSelectBreadcrumb, 
-    savePhase, isDirty, lastSavedAt, showRelations, showOutline, 
-    viewMode, onSave, onUpdateTitle, onToggleRelations, onOutlineEnter, onOutlineLeave, onSetViewMode 
+  const {
+    icon, title, isTitleManuallyEdited, breadcrumbs, onSelectBreadcrumb,
+    savePhase, isDirty, lastSavedAt, showRelations, showOutline,
+    viewMode, onSave, onUpdateTitle, onToggleRelations, onOutlineEnter, onOutlineLeave, onSetViewMode
   } = props;
 
   const [tempTitle, setTempTitle] = useState(title);
@@ -60,19 +60,20 @@ export function EditorHeader(props: EditorHeaderProps) {
     <div className="flex flex-col bg-transparent px-0 pt-0 pb-2 antialiased">
       <div className="sticky top-0 z-50 bg-reflect-bg/95 backdrop-blur-sm pt-6 pb-4 mb-4 border-b border-transparent hover:border-reflect-border/10 transition-colors flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div 
+          <div
             className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-reflect-muted opacity-40 cursor-default"
-            title={lastSavedAt ? `同步于 ${lastSavedAt}` : undefined}
+            title={savePhase === 'error' ? '保存失败，等待自动重试' : lastSavedAt ? `同步于 ${lastSavedAt}` : undefined}
           >
-            <div className={`w-1.5 h-1.5 rounded-full ${savePhase === 'saving' ? 'bg-amber-400 animate-pulse' : isDirty ? 'bg-rose-400' : 'bg-emerald-400 opacity-50'}`} />
+            <div className={`w-1.5 h-1.5 rounded-full ${savePhase === 'saving' ? 'bg-amber-400 animate-pulse' : savePhase === 'queued' ? 'bg-sky-400' : savePhase === 'error' ? 'bg-rose-400 animate-pulse' : isDirty ? 'bg-rose-400' : 'bg-emerald-400 opacity-50'}`} />
             <span>
-              {savePhase === 'saving' ? '正在保存' : 
-               savePhase === 'queued' ? '已加入队列' : 
-               isDirty ? '未保存' : 
+              {savePhase === 'saving' ? '正在保存' :
+               savePhase === 'queued' ? '等待同步' :
+               savePhase === 'error' ? '同步失败' :
+               isDirty ? '未保存' :
                '已同步'}
             </span>
           </div>
-          
+
           {breadcrumbs && breadcrumbs.length > 1 && (
             <div className="flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
               {breadcrumbs.slice(0, -1).map((bc, idx) => (
@@ -89,14 +90,14 @@ export function EditorHeader(props: EditorHeaderProps) {
 
         <div className="flex items-center gap-2">
            <div className="flex items-center bg-reflect-sidebar/40 rounded-lg p-0.5 border border-reflect-border/30">
-            <button 
-              onClick={() => onSetViewMode('edit')} 
+            <button
+              onClick={() => onSetViewMode('edit')}
               className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${viewMode === 'edit' ? 'bg-white text-reflect-text shadow-soft' : 'text-reflect-muted hover:text-reflect-text'}`}
             >
               编辑
             </button>
-            <button 
-              onClick={() => onSetViewMode('preview')} 
+            <button
+              onClick={() => onSetViewMode('preview')}
               className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${viewMode === 'preview' ? 'bg-white text-reflect-text shadow-soft' : 'text-reflect-muted hover:text-reflect-text'}`}
             >
               预览
@@ -106,7 +107,7 @@ export function EditorHeader(props: EditorHeaderProps) {
           <button onMouseEnter={onOutlineEnter} onMouseLeave={onOutlineLeave} className={`p-2 rounded-full transition-colors ${showOutline ? 'bg-reflect-sidebar text-reflect-text' : 'hover:bg-reflect-sidebar/60 text-reflect-muted'}`}><BookMarked size={14} /></button>
         </div>
       </div>
-      
+
       <div className="flex items-baseline gap-4">
         <div className="text-3xl opacity-80 select-none grayscale hover:grayscale-0 transition-all cursor-pointer">
           {icon || '📄'}

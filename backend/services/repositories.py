@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -22,6 +23,68 @@ from backend.models.db_models import (
 
 DEFAULT_NOTEBOOK_NAME = "快速笔记"
 INBOX_NOTEBOOK_NAME = "收集箱(Inbox)"
+UNSET = object()
+PRIVATE_TAGS = {"私密", "private"}
+
+
+def is_private_tags(tags: list[str] | None) -> bool:
+    if not tags:
+        return False
+    return any(tag.lower() in PRIVATE_TAGS for tag in tags)
+
+
+def note_is_private(note: Note | None) -> bool:
+    if not note or not note.tags:
+        return False
+    tags = [tag.strip() for tag in note.tags.split(",") if tag.strip()]
+    return is_private_tags(tags)
+
+
+def _list_child_notes(db: Session, parent_id: int, include_deleted: bool = True) -> list[Note]:
+    statement = select(Note).where(Note.parent_id == parent_id)
+    if not include_deleted:
+        statement = statement.where(Note.deleted_at.is_(None))
+    return list(db.scalars(statement.order_by(Note.position.asc(), Note.id.asc())))
+
+
+def _is_descendant_note(db: Session, note_id: int, candidate_parent_id: int | None) -> bool:
+    if candidate_parent_id is None:
+        return False
+    stack = [note_id]
+    seen: set[int] = set()
+    while stack:
+        current_id = stack.pop()
+        for child in _list_child_notes(db, current_id):
+            if child.id in seen:
+                continue
+            if child.id == candidate_parent_id:
+                return True
+            seen.add(child.id)
+            stack.append(child.id)
+    return False
+
+
+def _validate_parent_note(db: Session, note: Note, parent_id: int | None) -> Note | None:
+    if parent_id is None:
+        return None
+    if parent_id == note.id:
+        raise ValueError("Note cannot be its own parent")
+    parent = db.get(Note, parent_id)
+    if not parent or parent.deleted_at is not None:
+        raise ValueError("Parent note not found")
+    if _is_descendant_note(db, note.id, parent_id):
+        raise ValueError("Cannot move note under its own descendant")
+    return parent
+
+
+def _sync_subtree_notebook(db: Session, note_id: int, notebook_id: int | None) -> None:
+    for child in _list_child_notes(db, note_id):
+        if child.notebook_id != notebook_id:
+            child.notebook_id = notebook_id
+            db.add(child)
+        _sync_subtree_notebook(db, child.id, notebook_id)
+
+
 
 
 def list_notebooks(db: Session) -> list[Notebook]:
@@ -95,6 +158,13 @@ def get_note(db: Session, note_id: int) -> Note | None:
 
 
 def create_note(db: Session, title: str, content: str, summary: str, tags: list[str] | None, notebook_id: int | None, icon: str = "📝", parent_id: int | None = None, is_title_manually_edited: bool = False) -> Note:
+    parent = None
+    if parent_id is not None:
+        parent = db.get(Note, parent_id)
+        if not parent or parent.deleted_at is not None:
+            raise ValueError("Parent note not found")
+        notebook_id = parent.notebook_id
+
     note = Note(
         title=title,
         icon=icon,
@@ -102,9 +172,9 @@ def create_note(db: Session, title: str, content: str, summary: str, tags: list[
         summary=summary,
         tags=",".join(tags) if tags else "",
         notebook_id=notebook_id,
-        parent_id=parent_id,
+        parent_id=parent.id if parent else None,
         is_title_manually_edited=1 if is_title_manually_edited else 0,
-        position=next_note_position(db, notebook_id, parent_id),
+        position=next_note_position(db, notebook_id, parent.id if parent else None),
     )
     db.add(note)
     db.commit()
@@ -112,12 +182,36 @@ def create_note(db: Session, title: str, content: str, summary: str, tags: list[
     return note
 
 
-def update_note(db: Session, note_id: int, title: str | None = None, content: str | None = None, summary: str | None = None, tags: list[str] | None = None, icon: str | None = None, parent_id: int | None = None, is_title_manually_edited: bool | None = None) -> Note | None:
+def update_note(db: Session, note_id: int, title: str | None = None, content: str | None = None, summary: str | None = None, tags: list[str] | None = None, icon: str | None = None, parent_id: int | None | object = UNSET, is_title_manually_edited: bool | None = None, notebook_id: int | None | object = UNSET) -> Note | None:
     note = db.get(Note, note_id)
     if not note:
         return None
-    
+
     changed = False
+    target_parent = note.parent
+
+    if parent_id is not UNSET:
+        target_parent = _validate_parent_note(db, note, parent_id)
+        target_parent_id = target_parent.id if target_parent else None
+        target_notebook_id = target_parent.notebook_id if target_parent else (note.notebook_id if notebook_id is UNSET else notebook_id)
+        parent_changed = note.parent_id != target_parent_id
+        notebook_changed = note.notebook_id != target_notebook_id
+        should_reposition = parent_changed or notebook_changed
+
+        if parent_changed:
+            note.parent_id = target_parent_id
+            changed = True
+        if notebook_changed:
+            note.notebook_id = target_notebook_id
+            changed = True
+        if should_reposition:
+            target_position = next_note_position(db, target_notebook_id, target_parent_id)
+            if note.position != target_position:
+                note.position = target_position
+                changed = True
+    elif notebook_id is not UNSET and note.notebook_id != notebook_id:
+        note.notebook_id = notebook_id
+        changed = True
 
     if title is not None and note.title != title:
         note.title = title
@@ -136,20 +230,18 @@ def update_note(db: Session, note_id: int, title: str | None = None, content: st
     if icon is not None and note.icon != icon:
         note.icon = icon
         changed = True
-    if parent_id is not None and note.parent_id != parent_id:
-        note.parent_id = parent_id
-        changed = True
     if is_title_manually_edited is not None:
         val = 1 if is_title_manually_edited else 0
         if note.is_title_manually_edited != val:
             note.is_title_manually_edited = val
             changed = True
-    
+
     if changed:
         db.add(note)
+        _sync_subtree_notebook(db, note.id, note.notebook_id)
         db.commit()
         db.refresh(note)
-    
+
     return note
 
 
@@ -157,14 +249,18 @@ def move_note(db: Session, note_id: int, notebook_id: int | None, position: int,
     note = db.get(Note, note_id)
     if not note:
         return None
-    target_notes = list(db.scalars(select(Note).where(Note.notebook_id == notebook_id, Note.parent_id == parent_id, Note.id != note_id, Note.deleted_at.is_(None)).order_by(Note.position.asc())))
+    parent = _validate_parent_note(db, note, parent_id)
+    target_notebook_id = parent.notebook_id if parent else notebook_id
+    target_parent_id = parent.id if parent else None
+    target_notes = list(db.scalars(select(Note).where(Note.notebook_id == target_notebook_id, Note.parent_id == target_parent_id, Note.id != note_id, Note.deleted_at.is_(None)).order_by(Note.position.asc())))
     target_index = max(0, min(position, len(target_notes)))
     target_notes.insert(target_index, note)
     for index, item in enumerate(target_notes):
-        item.notebook_id = notebook_id
-        item.parent_id = parent_id
+        item.notebook_id = target_notebook_id
+        item.parent_id = target_parent_id
         item.position = index + 1
         db.add(item)
+    _sync_subtree_notebook(db, note.id, target_notebook_id)
     db.commit()
     db.refresh(note)
     return note
@@ -218,17 +314,25 @@ def restore_note(db: Session, note_id: int) -> Note | None:
     note = db.get(Note, note_id)
     if not note:
         return None
-    
-    # Check if parent is deleted
-    if note.parent_id:
-        parent = db.get(Note, note.parent_id)
-        if not parent or parent.deleted_at is not None:
-            note.parent_id = None
-            
-    note.deleted_at = None
-    note.notebook_id = note.notebook_id or get_or_create_default_notebook(db).id
-    note.position = next_note_position(db, note.notebook_id, note.parent_id)
-    db.add(note)
+
+    def restore_subtree(current: Note, parent: Note | None, notebook_id: int | None) -> None:
+        current.deleted_at = None
+        current.parent_id = parent.id if parent else None
+        current.notebook_id = notebook_id
+        current.position = next_note_position(db, notebook_id, current.parent_id)
+        db.add(current)
+
+        children = _list_child_notes(db, current.id)
+        for child in children:
+            if child.deleted_at is not None:
+                restore_subtree(child, current, notebook_id)
+
+    parent = db.get(Note, note.parent_id) if note.parent_id else None
+    if parent and parent.deleted_at is not None:
+        parent = None
+
+    notebook_id = (parent.notebook_id if parent else note.notebook_id) or get_or_create_default_notebook(db).id
+    restore_subtree(note, parent, notebook_id)
     db.commit()
     db.refresh(note)
     return note

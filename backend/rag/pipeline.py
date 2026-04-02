@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.config import get_settings
 from backend.models.db_models import Note
 from backend.services.ai_client import AIClient
+from backend.services.repositories import note_is_private
 from backend.services.vector_store import vector_store
 
 
@@ -39,6 +40,8 @@ def citations_from_results(db: Session, results: list[dict[str, Any]]) -> list[d
     for item in results:
         note_id = item["metadata"].get("note_id")
         note = db.get(Note, int(note_id)) if note_id else None
+        if note_is_private(note):
+            continue
         citations.append(
             {
                 "note_id": int(note_id) if note_id else None,

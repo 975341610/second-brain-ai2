@@ -36,9 +36,9 @@ import { uploadLocalMedia, genericEmbedUrl } from '../editor/utils';
 import type { Note } from '../../lib/types';
 import { useAppStore } from '../../store/useAppStore';
 
-import { 
-  Type, Heading1, Heading2, Heading3, CheckSquare, List, ListOrdered, 
-  Quote, Minus, Plus, Table, FileCode, ImageIcon, 
+import {
+  Type, Heading1, Heading2, Heading3, CheckSquare, List, ListOrdered,
+  Quote, Minus, Plus, Table, FileCode, ImageIcon,
   Sparkles, Wand2, GripVertical, Bold, Italic, Underline, Code, Link2, Eraser,
   Rows, Columns, Trash2, Combine, Split, Settings2, Calendar, Hash, CheckCircle2,
   Bookmark as BookMarked
@@ -49,6 +49,9 @@ interface NotionEditorProps {
   notes: Note[];
   onSave: (payload: any) => Promise<void>;
   onUpdateTags?: (noteId: number, tags: string[]) => Promise<void>;
+  onTogglePrivate?: () => void;
+  isPrivate?: boolean;
+  canRevealPrivateContent?: boolean;
   onCreateSubPage: (parentId: number) => void;
   onSelectNote: (noteId: number) => void;
   onNotify?: (text: string, tone?: 'success' | 'error' | 'info') => void;
@@ -58,7 +61,7 @@ interface NotionEditorProps {
 }
 
 export const NotionEditor: React.FC<NotionEditorProps> = ({
-  note, notes, onSave, onUpdateTags, onCreateSubPage, onSelectNote, onNotify, outline, references, relatedNotes
+  note, notes, onSave, onUpdateTags, onTogglePrivate, isPrivate = false, canRevealPrivateContent = true, onCreateSubPage, onSelectNote, onNotify, outline, references, relatedNotes
 }) => {
   const { userStats } = useAppStore();
   const hasWallpaper = !!userStats?.wallpaper_url;
@@ -87,6 +90,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
   const [isAIStreaming, setIsAIStreaming] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [savePhase, setSavePhase] = useState<'idle' | 'queued' | 'saving' | 'error'>('idle');
   const [propertyMenuNode, setPropertyMenuNode] = useState<{ pos: number; rect: DOMRect } | null>(null);
   const [activeTableRect, setActiveTableRect] = useState<DOMRect | null>(null);
   const [activeRowRect, setActiveRowRect] = useState<DOMRect | null>(null);
@@ -177,6 +182,10 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
   // Define handleAIAction inside the component to use it in slashItems
   const handleAIAction = useCallback(async (action: string, customPrompt?: string) => {
+    if (isPrivate) {
+      onNotify?.('私密笔记暂不支持将内容发送给 AI。', 'info');
+      return;
+    }
     const currentEditor = editorRef.current;
     if (!currentEditor) return;
     const { from, to } = currentEditor.state.selection;
@@ -204,7 +213,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
     } finally {
       setIsAIStreaming(false);
     }
-  }, [onNotify]);
+  }, [isPrivate, onNotify]);
 
   // Use a ref to store the latest slash items to avoid re-creating extensions
   const slashItemsRef = useRef<SlashItem[]>([]);
@@ -513,6 +522,35 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
   const isSavingRef = useRef<number | null>(null);
   const onSaveRef = useRef(onSave);
   const isUnmountedRef = useRef(false);
+  const latestSaveRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!note) {
+      setIsDirty(false);
+      setSavePhase('idle');
+      return;
+    }
+
+    if (note.sync_status === 'error') {
+      setSavePhase('error');
+      return;
+    }
+
+    if (note.sync_status === 'queued') {
+      setSavePhase('queued');
+      return;
+    }
+
+    if (note.sync_status === 'saving') {
+      setSavePhase('saving');
+      return;
+    }
+
+    if (!isDirty) {
+      setSavePhase('idle');
+    }
+  }, [note?.id, note?.sync_status, isDirty]);
+
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -527,7 +565,7 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
   useEffect(() => {
     if (!editor || !note) return;
-    
+
     let timer: ReturnType<typeof setTimeout>;
     let isModified = false;
 
@@ -536,11 +574,11 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
     const executeSave = async (isSync = false) => {
       if (!isModified && !isSync) return;
-      
+
       // Allow saving even if unmounted, just skip React state updates
       const currentContent = editor.getHTML();
       const currentText = editor.getText().trim();
-      
+
       let newTitle = note.title || '未命名笔记';
       const isTitleEdited = note.is_title_manually_edited || false;
 
@@ -551,29 +589,49 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
       if (currentContent === note.content && newTitle === note.title) {
         isModified = false;
+        setIsDirty(false);
+        if (note.sync_status !== 'error' && note.sync_status !== 'queued' && note.sync_status !== 'saving') {
+          setSavePhase('idle');
+        }
         return;
       }
 
+      const requestId = latestSaveRequestRef.current + 1;
+      latestSaveRequestRef.current = requestId;
       isSavingRef.current = currentSessionNoteId;
-      if (!isUnmountedRef.current && noteRef.current?.id === currentSessionNoteId) setIsSaving(true);
-      
+      if (!isUnmountedRef.current && noteRef.current?.id === currentSessionNoteId) {
+        setIsSaving(true);
+        setSavePhase('saving');
+      }
+
       try {
-        await onSaveRef.current({ 
-          id: currentSessionNoteId, 
-          content: currentContent, 
-          title: newTitle, 
-          icon: note.icon, 
+        await onSaveRef.current({
+          id: currentSessionNoteId,
+          content: currentContent,
+          title: newTitle,
+          icon: note.icon,
           parent_id: note.parent_id,
           is_title_manually_edited: isTitleEdited,
-          silent: true 
+          silent: true
         });
 
-        isModified = false; 
+        if (latestSaveRequestRef.current !== requestId) {
+          return;
+        }
+
+        isModified = false;
         if (!isUnmountedRef.current && noteRef.current?.id === currentSessionNoteId) {
+          setIsDirty(false);
           setLastSavedAt(new Date().toLocaleTimeString());
+          if (noteRef.current?.sync_status !== 'error') {
+            setSavePhase('idle');
+          }
         }
       } catch (error) {
-        console.error("Auto-save failed", error);
+        console.error('Auto-save failed', error);
+        if (!isUnmountedRef.current && noteRef.current?.id === currentSessionNoteId) {
+          setSavePhase('error');
+        }
       } finally {
         if (isSavingRef.current === currentSessionNoteId) isSavingRef.current = null;
         if (!isUnmountedRef.current && noteRef.current?.id === currentSessionNoteId) setIsSaving(false);
@@ -590,16 +648,28 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
 
     const onUpdate = () => {
       isModified = true;
+      setIsDirty(true);
+      setSavePhase('queued');
       clearTimeout(timer);
-      timer = setTimeout(handleSave, 1500); 
+      timer = setTimeout(handleSave, 1500);
+    };
+
+    const flushPendingChanges = () => {
+      if (isModified) {
+        void executeSave(true);
+      }
     };
 
     editor.on('update', onUpdate);
+    window.addEventListener('pagehide', flushPendingChanges);
+    window.addEventListener('beforeunload', flushPendingChanges);
 
     return () => {
       clearTimeout(timer);
       editor.off('update', onUpdate);
-      
+      window.removeEventListener('pagehide', flushPendingChanges);
+      window.removeEventListener('beforeunload', flushPendingChanges);
+
       // Cleanup happens BEFORE the next render's useEffect.
       // So editor content is still the old one. We MUST save it!
       if (isModified) {
@@ -619,8 +689,8 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
               isTitleManuallyEdited={note?.is_title_manually_edited ?? false}
               breadcrumbs={[]}
               onSelectBreadcrumb={onSelectNote}
-              savePhase={isSaving ? 'saving' : 'idle'}
-              isDirty={false}
+              savePhase={savePhase}
+              isDirty={isDirty}
               lastSavedAt={lastSavedAt}
               showRelations={false}
               showOutline={showOutline}
@@ -659,8 +729,25 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
               onSetViewMode={setViewMode}
             />
 
-            {showOutline && (
-              <div 
+            {showOutline && isPrivate && !canRevealPrivateContent && (
+              <div
+                className="fixed top-24 right-12 z-[100] w-64 bg-white/95 backdrop-blur-md border border-stone-200 rounded-xl shadow-2xl p-4 animate-in fade-in slide-in-from-right-4 duration-200"
+                onMouseEnter={handleOutlineEnter}
+                onMouseLeave={handleOutlineLeave}
+              >
+                <div className="flex items-center gap-2 mb-3 text-stone-500">
+                  <BookMarked size={16} />
+                  <span className="text-xs font-bold uppercase tracking-widest">文章大纲</span>
+                </div>
+                <div className="py-4 text-center">
+                  <p className="text-xs text-stone-500 italic">私密笔记锁定中</p>
+                  <p className="text-[10px] text-stone-400 mt-1">解锁后才会显示大纲内容</p>
+                </div>
+              </div>
+            )}
+
+            {showOutline && (!isPrivate || canRevealPrivateContent) && (
+              <div
                 className="fixed top-24 right-12 z-[100] w-64 bg-white/95 backdrop-blur-md border border-stone-200 rounded-xl shadow-2xl p-4 animate-in fade-in slide-in-from-right-4 duration-200"
                 onMouseEnter={handleOutlineEnter}
                 onMouseLeave={handleOutlineLeave}
@@ -726,10 +813,12 @@ export const NotionEditor: React.FC<NotionEditorProps> = ({
             )}
 
             {note && (
-              <PropertyPanel 
-                note={note} 
-                onUpdate={(updated) => onSave({ ...updated, silent: true })} 
+              <PropertyPanel
+                note={note}
+                onUpdate={(updated) => onSave({ ...updated, silent: true })}
                 onUpdateTags={onUpdateTags}
+                isPrivate={isPrivate}
+                onTogglePrivate={onTogglePrivate}
               />
             )}
           </div>
