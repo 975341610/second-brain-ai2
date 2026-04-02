@@ -32,6 +32,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install frontend dependencies
+        shell: powershell
+        run: npm --prefix frontend install --include=dev --legacy-peer-deps
+
       - name: Install backend build dependencies
         shell: powershell
         run: |
