@@ -32,17 +32,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        shell: powershell
-        run: npm ci --include=dev --legacy-peer-deps
-
-      - name: Build frontend
+      - name: Install and build frontend
         working-directory: frontend
         shell: powershell
         env:
           CI: false
-        run: npm run build
+          NPM_CONFIG_PRODUCTION: false
+        run: |
+          npm ci --include=dev --legacy-peer-deps
+          if (!(Test-Path "node_modules/.bin/vite.cmd")) { throw "vite.cmd missing after frontend install" }
+          .\node_modules\.bin\vite.cmd build
 
       - name: Install backend build dependencies
         shell: powershell
